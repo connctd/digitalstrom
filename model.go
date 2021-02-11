@@ -83,6 +83,7 @@ type OutputChannel struct {
 	ChannelType  string `json:"channelType"`
 	ChannelIndex int    `json:"channelIndex"`
 	ChannelName  string `json:"channelName"`
+	Value        int
 }
 
 type Sensor struct {
@@ -90,6 +91,30 @@ type Sensor struct {
 	Valid bool `json:"valid"`
 	Value int  `json:"value"`
 }
+
+type OutputChannelType string
+
+const (
+	OCT_brightness               OutputChannelType = "brightness"
+	OCT_hue                      OutputChannelType = "hue"
+	OCT_saturation               OutputChannelType = "saturation"
+	OCT_colortemp                OutputChannelType = "colortemp"
+	OCT_x                        OutputChannelType = "x"
+	OCT_y                        OutputChannelType = "y"
+	OCT_shadePositionOutside     OutputChannelType = "shadePositionOutside"
+	OCT_shadePositionIndoor      OutputChannelType = "shadePositionIndoor"
+	OCT_shadeOpeningAngleOutside OutputChannelType = "shadeOpeningAngleOutside"
+	OCT_shadeOpeningAngleInside  OutputChannelType = "shadeOpeningAngleInside"
+	OCT_transparency             OutputChannelType = "transparency"
+	OCT_airFlowIntensity         OutputChannelType = "airFlowIntensity"
+	OCT_airFlowDirection         OutputChannelType = "airFlowDirection"
+	OCT_airFlapPosition          OutputChannelType = "airFlapPosition"
+	OCT_airLouverPosition        OutputChannelType = "airLouverPosition"
+	OCT_heatingPower             OutputChannelType = "heatingPower"
+	OCT_coolingCapacity          OutputChannelType = "coolingCapacity"
+	OCT_audioVolume              OutputChannelType = "audioVolume"
+	OCT_powerState               OutputChannelType = "powerState"
+)
 
 // Generates the Apartment structure out of a given json string
 func GenerateApartment(j string) (*Apartment, error) {

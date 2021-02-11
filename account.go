@@ -11,6 +11,7 @@ import (
 type Account struct {
 	Connection Connection
 	Structure  Structure
+	Devices    map[string]Device
 }
 
 // NewAccount set connection baseURL to default and returns Account
@@ -19,6 +20,7 @@ func NewAccount() *Account {
 		Connection: Connection{
 			BaseURL: DEFAULT_BASE_URL,
 		},
+		Devices: make(map[string]Device),
 	}
 }
 
@@ -80,6 +82,15 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	json.Unmarshal(jsonString, &s)
 
 	a.Structure = s
-
+	a.assignDevices()
 	return &s, nil
+}
+
+func (a *Account) assignDevices() {
+	for i := range a.Structure.Apart.Zones {
+		for j := range a.Structure.Apart.Zones[i].Devices {
+			device := a.Structure.Apart.Zones[i].Devices[j]
+			a.Devices[device.DisplayID] = device
+		}
+	}
 }

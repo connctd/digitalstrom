@@ -2,6 +2,15 @@ package main
 
 /*
 *
+
+    ***
+ ***   ****
+**       ** **        **
+		    ****   ***
+		        ***
+d i g i t a l S T R O M
+
+
 *	Console file is not needed for using the library. It contains console utilities that allows a
 *   stand-alone usage of the library on the terminal. It could be seen as reference implementations
 *   for demonstrating the usage of that library.
@@ -14,7 +23,7 @@ package main
 *												└ Printing
 *
 *
- */
+*/
 
 import (
 	"bufio"
@@ -60,8 +69,12 @@ func main() {
 			break
 		case "init":
 			processInitCommand(&account, cmd)
+			break
 		case "login":
 			processLoginCommand(&account, cmd)
+			break
+		case "list":
+			processListCommand(&account, cmd)
 			break
 		case "print":
 			processPrintCommand(&account, cmd)
@@ -69,6 +82,7 @@ func main() {
 		case "register":
 			processRegisterCommand(&account, cmd)
 			break
+
 		case "help":
 			printHelp()
 			break
@@ -115,69 +129,33 @@ func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 }
 
 func processInitCommand(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) >= 2 {
-		switch cmd[1] {
-		case "-at":
-			if len(cmd) > 3 {
-				fmt.Println("Too many arguments for init command. init -at <applicationToken> expected")
-				return
-			}
-			if len(cmd) < 3 {
-				fmt.Println("Application token is missing. Please type init -at <applicationToken>")
-				return
-			}
-			a.SetApplicationToken(cmd[2])
-			err := a.ApplicationLogin()
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				fmt.Println("Application successful logged in.")
-			}
-			break
-		}
+	if len(cmd) > 2 {
+		fmt.Println("Too many arguments for init command. init [applicationToken] expected.")
 	}
-}
-
-func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
-	username := ""
-	password := ""
-	applicationName := ""
-	if len(cmd) != 7 {
-		fmt.Println("Error. Not enough arguments. Type: register -un <username> -pw <password> -an <application name>")
-		return
+	if len(cmd) == 2 {
+		a.SetApplicationToken(cmd[1])
 	}
-	for i := 1; i < len(cmd); i++ {
-		switch cmd[i] {
-		case "-un":
-			username = cmd[i+1]
-			i++
-			break
-		case "-pw":
-			password = cmd[i+1]
-			i++
-			break
-		case "-an":
-			applicationName = cmd[i+1]
-			i++
-			break
-		default:
-			fmt.Println("Error. Unknown parameter " + cmd[i] + ". Please type: register -un <username> -pw <password> -an <application name>")
-			return
-		}
-	}
-
-	if username == "" || password == "" || applicationName == "" {
-		fmt.Println("Error. User name, password and application name have to be given for registering an application")
-		return
-	}
-	atoken, err := a.Register(applicationName, username, password)
+	err := a.Init()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Applicaiton with name " + applicationName + " registered.")
-	fmt.Println("Your applicaiton token = " + atoken)
+	fmt.Println("Success. Account is initiaised with complete structure.")
+}
 
+func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 4 {
+		fmt.Println("Error. No valid register command. Type: register <username> <password> <application name>. No spaces allowed.")
+		return
+	}
+	atoken, err := a.Register(cmd[3], cmd[1], cmd[2])
+	if err != nil {
+		fmt.Println("Error. Unable to register application.")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Applicaiton with name " + cmd[3] + " registered.")
+	fmt.Println("Your applicaiton token = " + atoken)
 }
 
 func processGetCommand(a *digitalstrom.Account, args []string) {
@@ -190,7 +168,6 @@ func processGetCommand(a *digitalstrom.Account, args []string) {
 		fmt.Println("SUCCESS")
 	}
 }
-
 func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) == 1 {
 		fmt.Println("\r\rError. Not a valid print command. use -> print <what to print>. Type 'print help' for complete command description.")
@@ -202,36 +179,46 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 		break
 	case "structure":
 		processPrintStructureCmd(a, cmd)
+		break
 	case "token":
 		fmt.Println("  appication token = " + a.Connection.ApplicationToken)
 		fmt.Println("     session token = " + a.Connection.SessionToken)
 		break
+	default:
+		fmt.Println(" Error. Unknown parameter '" + cmd[1] + "' for print command.")
+	}
+}
+
+func processListCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) == 1 {
+		fmt.Println("\r\rError. Not a valid list command. use -> list <what to list>. Type 'print help' for complete command description.")
+		return
+	}
+	switch cmd[1] {
+	case "devices":
+		printDeviceList(a)
+		break
+	default:
+		fmt.Println("Error, list'" + cmd[1] + " is unknown")
 	}
 }
 
 func processPrintStructureCmd(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) > 2 {
-		if (cmd[2] == "-l") || (cmd[2] == "-level") {
-			if len(cmd) < 4 {
-				fmt.Println("\r\nError. Acutal depth value is missing. use -> print structure -l <level of depth>")
-				return
-			}
-			if len(cmd) > 4 {
-				fmt.Println("\r\nError. Too many parameters for cmd 'print structure'. use -> print structure [-l <level of depth>]")
-				return
-			}
-			s, err := strconv.Atoi(cmd[3])
-			if err != nil {
-				fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
-				return
-			}
-			printStructure(a, s+1)
+	if len(cmd) > 3 {
+		fmt.Println("\r\nError. Too many parameters for cmd 'print structure'. use -> print structure [level of depth]")
+		return
+	}
+
+	if len(cmd) == 3 {
+		s, err := strconv.Atoi(cmd[2])
+		if err != nil {
+			fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Level of depth expected")
 			return
 		}
-		fmt.Println("\r\nERROR. '" + cmd[2] + "' is an unknown argument for printing devices. Valid arguments are '-l <level of depth>'")
-	} else {
-		printStructure(a, -1)
+		printStructure(a, s+1)
+		return
 	}
+	printStructure(a, -1)
 }
 
 // ------------------------------ Node Generation -------------------------------------------
@@ -252,7 +239,7 @@ func generateZoneNode(zone *digitalstrom.Zone) node {
 	n.elems = append(n.elems, "Name       "+zone.Name)
 	n.elems = append(n.elems, "ID         "+strconv.Itoa(zone.ID))
 	n.elems = append(n.elems, "FloorID    "+strconv.Itoa(zone.FloorID))
-	n.elems = append(n.elems, "FloorID    "+strconv.FormatBool(zone.IsPresent))
+	n.elems = append(n.elems, "IsPresent  "+strconv.FormatBool(zone.IsPresent))
 
 	for _, device := range zone.Devices {
 		n.childs = append(n.childs, generateDeviceNode(&device))
@@ -264,11 +251,36 @@ func generateZoneNode(zone *digitalstrom.Zone) node {
 func generateDeviceNode(device *digitalstrom.Device) node {
 	n := node{name: "Device " + device.Name}
 
-	n.elems = append(n.elems, "Name  "+device.Name)
-	n.elems = append(n.elems, "ID    "+device.ID)
-	n.elems = append(n.elems, "UUID  "+device.UUID)
+	n.elems = append(n.elems, "Name              "+device.Name)
+	n.elems = append(n.elems, "ID                "+device.ID)
+	n.elems = append(n.elems, "UUID              "+device.UUID)
+	n.elems = append(n.elems, "AKMIInputProperty "+device.AKMInputProperty)
+	n.elems = append(n.elems, "BinaryInputCount  "+strconv.Itoa(device.BinaryInputCount))
+	n.elems = append(n.elems, "DispayID          "+device.DisplayID)
+	n.elems = append(n.elems, "FirstSeen         "+device.FirstSeen)
+	n.elems = append(n.elems, "HWInfo            "+device.HwInfo)
+	n.elems = append(n.elems, "InactiveSince     "+device.InactiveSince)
+	n.elems = append(n.elems, "LastDiscovered    "+device.LastDiscovered)
+	n.elems = append(n.elems, "MeterDSID         "+device.MeterDSID)
+	n.elems = append(n.elems, "MeterUSID         "+device.MeterDSUID)
+	n.elems = append(n.elems, "MeterName         "+device.MeterName)
+
+	for i := range device.OutputChannels {
+		n.childs = append(n.childs, generateOutputChannelNode(&device.OutputChannels[i]))
+	}
+	return n
+}
+
+func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
+	n := node{name: "Channel " + channel.ChannelType}
+
+	n.elems = append(n.elems, "Name  "+channel.ChannelName)
+	n.elems = append(n.elems, "ID    "+channel.ChannelID)
+	n.elems = append(n.elems, "Type  "+channel.ChannelType)
+	n.elems = append(n.elems, "Index "+strconv.Itoa(channel.ChannelIndex))
 
 	return n
+
 }
 
 // --------------------------- Printing ----------------------------------
@@ -299,14 +311,24 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("   Commands you could use : ")
 	fmt.Println()
-	fmt.Println("        register -un <username> -pw <password> -an <application name>")
-	fmt.Println("            init [-at <applicationToken>]")
-	fmt.Println("           login")
-	fmt.Println("             get [structure]")
-	fmt.Println("           print [token]")
-	fmt.Println("                 [structure [-l <depth level>]]")
 	fmt.Println("            exit")
-	fmt.Println("            help")
+	fmt.Println("            init [applicationToken]")
+	fmt.Println("             get structure")
+	fmt.Println("            list devices")
+	fmt.Println("                 groups")
+	fmt.Println("                 zones")
+	fmt.Println("            help [command]")
+	fmt.Println("           login")
+	fmt.Println("           print device <deviceID>")
+	fmt.Println("                 help")
+	fmt.Println("                 structure [depth level]")
+	fmt.Println("                 token")
+	fmt.Println("        register <username> <password> <application name>")
+	fmt.Println("             set on <deviceID>")
+	fmt.Println("                 off <deviceID>")
+	fmt.Println("                 channel <deviceID> <channelType> <value>")
+	fmt.Println("                 channels <deviceID> <channelType> <value> [<channelType> <value>]")
+
 }
 
 func printStructure(a *digitalstrom.Account, level int) {
@@ -314,6 +336,13 @@ func printStructure(a *digitalstrom.Account, level int) {
 	node := generateApartmentNode(&a.Structure.Apart)
 	fmt.Println()
 	printNode("", "", true, &node, level)
+}
+
+func printDeviceList(a *digitalstrom.Account) {
+	fmt.Println("Devices")
+	for id, dev := range a.Devices {
+		fmt.Println("   " + id + " " + dev.Name)
+	}
 }
 
 func printAppartment(a *digitalstrom.Apartment, level int) {
