@@ -4,7 +4,7 @@ package main
 *
 *	Console file is not needed for using the library. It contains console utilities that allows a
 *   stand-alone usage of the library on the terminal. It could be seen as reference implementations
-*   for demonstrating the usage the library.
+*   for demonstrating the usage of that library.
 *
 *	Structure of this file:			console.go  ┐
 *												├ main()
@@ -29,7 +29,7 @@ import (
 )
 
 // node Helper structure to build a tree with leafs (simple string) and child nodes.
-// will be used to structure the printout for complex objects like devices, locations, etc..
+// will be used to structure the printout for complex objects like devices, channels, etc..
 type node struct {
 	elems  []string
 	childs []node
@@ -48,13 +48,6 @@ func main() {
 		processProgramArguments(&account, argsWithoutProg)
 	}
 
-	//str, err := account.RequestStructure()
-	//if err != nil {
-	//		fmt.Println(err)//
-	//} else {
-	//		fmt.Println(str)
-	//}
-
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		// waiting for imput by user, split command into pieces by seperator " "
@@ -65,11 +58,17 @@ func main() {
 		case "get":
 			processGetCommand(&account, cmd)
 			break
+		case "init":
+			processInitCommand(&account, cmd)
 		case "login":
 			processLoginCommand(&account, cmd)
 			break
 		case "print":
 			processPrintCommand(&account, cmd)
+			break
+		case "register":
+			processRegisterCommand(&account, cmd)
+			break
 		case "help":
 			printHelp()
 			break
@@ -107,12 +106,78 @@ func processProgramArguments(a *digitalstrom.Account, args []string) {
 }
 
 func processLoginCommand(a *digitalstrom.Account, cmd []string) {
-	err := a.Login()
+	err := a.ApplicationLogin()
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	fmt.Println("Login successful - new session token = " + a.Connection.SessionToken)
+}
+
+func processInitCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) >= 2 {
+		switch cmd[1] {
+		case "-at":
+			if len(cmd) > 3 {
+				fmt.Println("Too many arguments for init command. init -at <applicationToken> expected")
+				return
+			}
+			if len(cmd) < 3 {
+				fmt.Println("Application token is missing. Please type init -at <applicationToken>")
+				return
+			}
+			a.SetApplicationToken(cmd[2])
+			err := a.ApplicationLogin()
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				fmt.Println("Application successful logged in.")
+			}
+			break
+		}
+	}
+}
+
+func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
+	username := ""
+	password := ""
+	applicationName := ""
+	if len(cmd) != 7 {
+		fmt.Println("Error. Not enough arguments. Type: register -un <username> -pw <password> -an <application name>")
+		return
+	}
+	for i := 1; i < len(cmd); i++ {
+		switch cmd[i] {
+		case "-un":
+			username = cmd[i+1]
+			i++
+			break
+		case "-pw":
+			password = cmd[i+1]
+			i++
+			break
+		case "-an":
+			applicationName = cmd[i+1]
+			i++
+			break
+		default:
+			fmt.Println("Error. Unknown parameter " + cmd[i] + ". Please type: register -un <username> -pw <password> -an <application name>")
+			return
+		}
+	}
+
+	if username == "" || password == "" || applicationName == "" {
+		fmt.Println("Error. User name, password and application name have to be given for registering an application")
+		return
+	}
+	atoken, err := a.Register(applicationName, username, password)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Applicaiton with name " + applicationName + " registered.")
+	fmt.Println("Your applicaiton token = " + atoken)
+
 }
 
 func processGetCommand(a *digitalstrom.Account, args []string) {
@@ -146,13 +211,13 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 
 func processPrintStructureCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) > 2 {
-		if (cmd[2] == "l") || (cmd[2] == "level") {
+		if (cmd[2] == "-l") || (cmd[2] == "-level") {
 			if len(cmd) < 4 {
-				fmt.Println("\r\nError. Acutal depth value is missing. use -> print structure l <level of depth>")
+				fmt.Println("\r\nError. Acutal depth value is missing. use -> print structure -l <level of depth>")
 				return
 			}
 			if len(cmd) > 4 {
-				fmt.Println("\r\nError. Too many parameters for cmd 'print structure'. use -> print structure [l <level of depth>]")
+				fmt.Println("\r\nError. Too many parameters for cmd 'print structure'. use -> print structure [-l <level of depth>]")
 				return
 			}
 			s, err := strconv.Atoi(cmd[3])
@@ -163,7 +228,7 @@ func processPrintStructureCmd(a *digitalstrom.Account, cmd []string) {
 			printStructure(a, s+1)
 			return
 		}
-		fmt.Println("\r\nERROR. '" + cmd[2] + "' is an unknown argument for printing devices. Valid arguments are 'l <level of depth>'")
+		fmt.Println("\r\nERROR. '" + cmd[2] + "' is an unknown argument for printing devices. Valid arguments are '-l <level of depth>'")
 	} else {
 		printStructure(a, -1)
 	}
@@ -221,7 +286,7 @@ func printWelcomeMsg() {
 	fmt.Println("              /____/                                                                              /____/           ")
 	fmt.Println()
 	fmt.Println("===================================================================================================================")
-	fmt.Println("                                                                            powered by IoT connctd - " + "\033[1;37m" + "www.connctd.de")
+	fmt.Println("                                                                           powered by IoT connctd - " + "\033[1;37m" + "www.connctd.com")
 }
 
 func printByeMsg() {
@@ -234,10 +299,12 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("   Commands you could use : ")
 	fmt.Println()
+	fmt.Println("        register -un <username> -pw <password> -an <application name>")
+	fmt.Println("            init [-at <applicationToken>]")
 	fmt.Println("           login")
 	fmt.Println("             get [structure]")
 	fmt.Println("           print [token]")
-	fmt.Println("                 [structure [l <depth level>]]")
+	fmt.Println("                 [structure [-l <depth level>]]")
 	fmt.Println("            exit")
 	fmt.Println("            help")
 }

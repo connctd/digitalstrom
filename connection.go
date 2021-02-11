@@ -3,6 +3,7 @@ package digitalstrom
 import (
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -20,6 +21,7 @@ const (
 type RequestError struct {
 	Err        string
 	StatusCode int
+	Request    http.Request
 }
 
 func (e *RequestError) Error() string {
@@ -67,9 +69,7 @@ func (c *Connection) Put(url string, body string) (*RequestResult, error) {
 	return c.doRequest(url, put, body, nil)
 }
 
-// doRequest Performing an Http Request to the given url using the given method and (optionally) sends the body
-func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
-
+func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	var req *http.Request
@@ -94,6 +94,16 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 		}
 	}
 	req.URL.RawQuery = q.Encode()
+	return req, nil
+}
+
+// doRequest Performing an Http Request to the given url using the given method and (optionally) sends the body
+func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
+
+	req, err := c.generateHTTPRequest(url, method, body, params)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -104,8 +114,7 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	// TODO: generate a better error message according to StatusCode
 	if res.StatusCode != http.StatusOK {
-
-		return nil, &RequestError{"Unexpected Resonse for " + url, res.StatusCode}
+		return nil, &RequestError{"Unexpected Resonse for " + url, res.StatusCode, *req}
 	}
 	if res.Header.Get("Content-Length") != "0" {
 		resp, err := ioutil.ReadAll(res.Body)
@@ -127,6 +136,63 @@ func convertToRequestResult(body []byte) (*RequestResult, error) {
 	}
 
 	return &requestResult, nil
+}
+
+func (c *Connection) applicationLogin() error {
+	if !c.checkApplicationToken() {
+		return errors.New("applicationToken is not set")
+	}
+	params := map[string]string{"loginToken": c.ApplicationToken}
+	res, err := c.doRequest(c.BaseURL+"/json/system/loginApplication", get, "", params)
+	if err != nil {
+		return err
+	}
+
+	if res.OK {
+		c.SessionToken = res.Result["token"].(string)
+		return nil
+	}
+	return errors.New(res.Message)
+}
+
+// register an application with the given applicationName. Performs a request to generate an application token. A second request requires the
+// Username and Password in order to generate a temporary session token. A third request enables the application token to login without
+// further user credentials (applicationLogin). Returns the application token or an error. The application token will not be assigned automatically.
+// Thus, in order to use the generated application token, it has to be set afterwards.
+func (c *Connection) register(username string, password string, applicationName string) (string, error) {
+	// request an ApplicationToken
+	res, err := c.doRequest(c.BaseURL+"/json/system/requestApplicationToken", get, "", map[string]string{"applicationName": applicationName})
+	if err != nil {
+		return "", err
+	}
+	if !res.OK {
+		return "", errors.New(res.Message)
+	}
+	applicationToken := res.Result["applicationToken"].(string)
+
+	// performing a login in order to generate a temporary session token
+	// HINT during the http request generation, parameters will be URL-encoded. This leads to a problem with the password
+	// when it contains symbols that will change during the encoding problem. The digitalstrom server is not performing an
+	// URL decoding to restore the password
+	// This is a workaround, that might fail with passwords which are not url compatible
+	res, err = c.doRequest(c.BaseURL+"/json/system/login?user="+username+"&password="+password, get, "", nil)
+	if err != nil {
+		return "", err
+	}
+	if !res.OK {
+		return "", errors.New(res.Message)
+	}
+
+	sessionToken := res.Result["token"].(string)
+
+	// use the session token to enable the application token. Future logins wont need user credentials anymore, the application token will be used to
+	// perform an application login
+	res, err = c.doRequest(c.BaseURL+"/json/system/enableToken", get, "", map[string]string{"applicationToken": applicationToken, "token": sessionToken})
+	if err != nil {
+		return "", err
+	}
+
+	return applicationToken, nil
 }
 
 func (c *Connection) checkApplicationToken() bool {
