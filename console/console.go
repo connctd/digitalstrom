@@ -163,7 +163,9 @@ func processGetCommand(a *digitalstrom.Account, args []string) {
 	case "structure":
 		_, err := a.RequestStructure()
 		if err != nil {
+			fmt.Println("Unable to receive structure")
 			fmt.Println(err)
+			return
 		}
 		fmt.Println("SUCCESS")
 	}
@@ -179,6 +181,18 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 		break
 	case "structure":
 		processPrintStructureCmd(a, cmd)
+		break
+	case "device":
+		processPrintDeviceCmd(a, cmd)
+		break
+	case "floor":
+		processPrintFloorCmd(a, cmd)
+		break
+	case "zone":
+		processPrintZoneCmd(a, cmd)
+		break
+	case "group":
+		processPrintGroupCmd(a, cmd)
 		break
 	case "token":
 		fmt.Println("  appication token = " + a.Connection.ApplicationToken)
@@ -197,6 +211,15 @@ func processListCommand(a *digitalstrom.Account, cmd []string) {
 	switch cmd[1] {
 	case "devices":
 		printDeviceList(a)
+		break
+	case "zones":
+		printZoneList(a)
+		break
+	case "floors":
+		printFloorList(a)
+		break
+	case "groups":
+		printGroupList(a)
 		break
 	default:
 		fmt.Println("Error, list'" + cmd[1] + " is unknown")
@@ -221,6 +244,135 @@ func processPrintStructureCmd(a *digitalstrom.Account, cmd []string) {
 	printStructure(a, -1)
 }
 
+func processPrintZoneCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 3 {
+		fmt.Println("\r\nError. No Zone ID given. Use -> print zone <zoneID> [level of depth]")
+		return
+	}
+	if len(cmd) > 4 {
+		fmt.Println("\r\nError. Too many parameters. Use -> print zone <zoneID> [level of depth]")
+		return
+	}
+
+	id, err := strconv.Atoi(cmd[2])
+	if err != nil {
+		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Zone ID must be a number")
+		return
+	}
+
+	zone, ok := a.Zones[id]
+	if !ok {
+		fmt.Println("\n\rError. Zone with id '" + cmd[2] + "' was not found. ")
+		return
+	}
+	node := generateZoneNode(&zone)
+	if len(cmd) == 4 {
+		l, err := strconv.Atoi(cmd[3])
+		if err != nil {
+			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintGroupCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 3 {
+		fmt.Println("\r\nError. No group id given. Use -> print group <groupID> [level of depth]")
+		return
+	}
+	if len(cmd) > 4 {
+		fmt.Println("\r\nError. Too many parameters. Use -> print group <groupID> [level of depth]")
+		return
+	}
+
+	id, err := strconv.Atoi(cmd[2])
+	if err != nil {
+		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Group ID must be a number")
+		return
+	}
+
+	group, ok := a.Groups[id]
+	if !ok {
+		fmt.Println("\n\rError. Group with id '" + cmd[2] + "' was not found. ")
+		return
+	}
+	node := generateGroupNode(&group)
+	if len(cmd) == 4 {
+		l, err := strconv.Atoi(cmd[3])
+		if err != nil {
+			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintFloorCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 3 {
+		fmt.Println("\r\nError. No floor id given. Use -> print floor <floorID> [level of depth]")
+		return
+	}
+	if len(cmd) > 4 {
+		fmt.Println("\r\nError. Too many parameters. Use -> print floor <floorID> [level of depth]")
+		return
+	}
+
+	id, err := strconv.Atoi(cmd[2])
+	if err != nil {
+		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Floor ID must be a number")
+		return
+	}
+
+	floor, ok := a.Floors[id]
+	if !ok {
+		fmt.Println("\n\rError. Floor with id '" + cmd[2] + "' was not found. ")
+		return
+	}
+	node := generateFloorNode(&floor)
+	if len(cmd) == 4 {
+		l, err := strconv.Atoi(cmd[3])
+		if err != nil {
+			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintDeviceCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 3 {
+		fmt.Println("\r\nError. No device id given. Use -> print device <deviceDisplayID> [level of depth]")
+		return
+	}
+	if len(cmd) > 4 {
+		fmt.Println("\r\nError. Too many parameters. Use -> print device <deviceDisplayID> [level of depth]")
+		return
+	}
+	device, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Println("\n\rError. Device with displayID '" + cmd[2] + "' was not found. ")
+		return
+	}
+	node := generateDeviceNode(&device)
+	if len(cmd) == 4 {
+		l, err := strconv.Atoi(cmd[3])
+		if err != nil {
+			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
 // ------------------------------ Node Generation -------------------------------------------
 
 func generateApartmentNode(app *digitalstrom.Apartment) node {
@@ -229,6 +381,21 @@ func generateApartmentNode(app *digitalstrom.Apartment) node {
 	for _, zone := range app.Zones {
 		n.childs = append(n.childs, generateZoneNode(&zone))
 	}
+
+	for _, floor := range app.Floors {
+		n.childs = append(n.childs, generateFloorNode(&floor))
+	}
+
+	return n
+}
+
+func generateFloorNode(floor *digitalstrom.Floor) node {
+	n := node{name: "Floor " + floor.Name}
+
+	n.elems = append(n.elems, "Name       "+floor.Name)
+	n.elems = append(n.elems, "ID         "+strconv.Itoa(floor.ID))
+	n.elems = append(n.elems, "Order      "+strconv.Itoa(floor.Order))
+	//n.elems = append(n.elems, "Zones      "+strconv.FormatBool(zone.IsPresent))
 
 	return n
 }
@@ -244,6 +411,25 @@ func generateZoneNode(zone *digitalstrom.Zone) node {
 	for _, device := range zone.Devices {
 		n.childs = append(n.childs, generateDeviceNode(&device))
 	}
+
+	for _, group := range zone.Groups {
+		n.childs = append(n.childs, generateGroupNode(&group))
+	}
+
+	return n
+}
+
+func generateGroupNode(group *digitalstrom.Group) node {
+	n := node{name: "Group " + group.Name}
+
+	n.elems = append(n.elems, "ID               "+strconv.Itoa(group.ID))
+	n.elems = append(n.elems, "Name             "+group.Name)
+	n.elems = append(n.elems, "ApplicationType  "+strconv.Itoa(group.ApplicationType))
+	n.elems = append(n.elems, "Color            "+strconv.Itoa(group.Color))
+	n.elems = append(n.elems, "IsPresent        "+strconv.FormatBool(group.IsPresent))
+	n.elems = append(n.elems, "IsValid          "+strconv.FormatBool(group.IsValid))
+
+	///n.elems = append(n.elems, "Devices     "+strconv.group.Devices)
 
 	return n
 }
@@ -315,14 +501,18 @@ func printHelp() {
 	fmt.Println("            init [applicationToken]")
 	fmt.Println("             get structure")
 	fmt.Println("            list devices")
+	fmt.Println("                 floors")
 	fmt.Println("                 groups")
 	fmt.Println("                 zones")
 	fmt.Println("            help [command]")
 	fmt.Println("           login")
-	fmt.Println("           print device <deviceID>")
+	fmt.Println("           print device <deviceID> [depth level]")
+	fmt.Println("                 floor <floorID> [depth level]")
+	fmt.Println("                 group <groupID> [depth level]")
 	fmt.Println("                 help")
 	fmt.Println("                 structure [depth level]")
 	fmt.Println("                 token")
+	fmt.Println("                 zone <zoneID> [depth level]")
 	fmt.Println("        register <username> <password> <application name>")
 	fmt.Println("             set on <deviceID>")
 	fmt.Println("                 off <deviceID>")
@@ -338,8 +528,53 @@ func printStructure(a *digitalstrom.Account, level int) {
 	printNode("", "", true, &node, level)
 }
 
+func printZoneList(a *digitalstrom.Account) {
+	fmt.Println("Zones")
+	if len(a.Groups) == 0 {
+		fmt.Println("    no Zones found")
+		return
+	}
+	for id, zone := range a.Zones {
+		fmt.Println("   " + strconv.Itoa(id) + " " + zone.Name)
+	}
+}
+
+func printGroupList(a *digitalstrom.Account) {
+	var line string
+
+	fmt.Println("Groups")
+	if len(a.Groups) == 0 {
+		fmt.Println("    no Groups found")
+		return
+	}
+	fmt.Println()
+	fmt.Println("     ID   Color    Name")
+	fmt.Println()
+	for id, group := range a.Groups {
+		line = "  " + toLen(strconv.Itoa(id), 5)
+		line = line + toLen(strconv.Itoa(group.Color), 7)
+		line = line + toLen(group.Name, 10)
+		fmt.Println("   " + line)
+	}
+}
+
+func printFloorList(a *digitalstrom.Account) {
+	fmt.Println("Floors")
+	if len(a.Floors) == 0 {
+		fmt.Println("    no Floors found")
+		return
+	}
+	for id, floor := range a.Floors {
+		fmt.Println("   " + strconv.Itoa(id) + " " + floor.Name)
+	}
+}
+
 func printDeviceList(a *digitalstrom.Account) {
 	fmt.Println("Devices")
+	if len(a.Devices) == 0 {
+		fmt.Println("    no Devices found")
+		return
+	}
 	for id, dev := range a.Devices {
 		fmt.Println("   " + id + " " + dev.Name)
 	}
@@ -383,4 +618,15 @@ func printNode(nl string, el string, lastChild bool, n *node, level int) {
 			printNode(el, el+"│", false, &node, level-1)
 		}
 	}
+}
+
+func toLen(str string, length int) string {
+	res := str
+	if len(str) > length {
+		return str
+	}
+	for i := len(str); i < length; i++ {
+		res = res + " "
+	}
+	return res
 }

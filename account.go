@@ -12,6 +12,10 @@ type Account struct {
 	Connection Connection
 	Structure  Structure
 	Devices    map[string]Device
+	Groups     map[int]Group
+	Zones      map[int]Zone
+	Floors     map[int]Floor
+	//Scenes     map[string]Scene
 }
 
 // NewAccount set connection baseURL to default and returns Account
@@ -21,6 +25,9 @@ func NewAccount() *Account {
 			BaseURL: DEFAULT_BASE_URL,
 		},
 		Devices: make(map[string]Device),
+		Groups:  make(map[int]Group),
+		Zones:   make(map[int]Zone),
+		Floors:  make(map[int]Floor),
 	}
 }
 
@@ -82,15 +89,25 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	json.Unmarshal(jsonString, &s)
 
 	a.Structure = s
-	a.assignDevices()
+	a.buildMaps()
 	return &s, nil
 }
 
-func (a *Account) assignDevices() {
+func (a *Account) buildMaps() {
 	for i := range a.Structure.Apart.Zones {
+		zone := a.Structure.Apart.Zones[i]
+		a.Zones[zone.ID] = zone
+		for j := range a.Structure.Apart.Zones[i].Groups {
+			group := a.Structure.Apart.Zones[i].Groups[j]
+			a.Groups[group.ID] = group
+		}
 		for j := range a.Structure.Apart.Zones[i].Devices {
 			device := a.Structure.Apart.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
 		}
+	}
+	for i := range a.Structure.Apart.Floors {
+		floor := a.Structure.Apart.Floors[i]
+		a.Floors[floor.ID] = floor
 	}
 }

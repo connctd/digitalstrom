@@ -12,7 +12,8 @@ type Structure struct {
 }
 
 type Apartment struct {
-	Zones []Zone `json:"zones"`
+	Zones  []Zone  `json:"zones"`
+	Floors []Floor `json:"floors"`
 }
 
 type Zone struct {
@@ -21,6 +22,24 @@ type Zone struct {
 	IsPresent bool     `json:"isPresent"`
 	FloorID   int      `json:"floorId"`
 	Devices   []Device `json:"devices"`
+	Groups    []Group  `json:"groups"`
+}
+
+type Floor struct {
+	ID    int    `json:"id"`
+	Order int    `json:"order"`
+	Name  string `json:"name"`
+	Zones []int  `json:"zones"`
+}
+
+type Group struct {
+	ID              int      `json:"id"`
+	Name            string   `json:"name"`
+	Color           int      `json:"color"`
+	ApplicationType int      `json:"applicationType"`
+	IsPresent       bool     `json:"isPresent"`
+	IsValid         bool     `json:"isValid"`
+	Devices         []string `json:"devices"`
 }
 
 type Device struct {
