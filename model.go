@@ -42,6 +42,38 @@ type Group struct {
 	Devices         []string `json:"devices"`
 }
 
+type Circuit struct {
+	Name                        string `json:"name"`
+	DSID                        string `json:"dsid"`
+	DSUID                       string `json:"dSUID"`
+	DisplayID                   string `json:"DisplayID"`
+	HwVersion                   int    `json:"hwVersion"`
+	HwVersionString             string `json:"hvVersionString"`
+	SwVersion                   string `json:"swVersion"`
+	ArmSwVersion                int    `json:"armSwVersion"`
+	DspSwVersion                int    `json:"dspSwVersion"`
+	IsUpToDate                  bool   `json:"isUpToDate"`
+	APIVersion                  int    `json:"apiVersion"`
+	Authorized                  bool   `json:"authorized"`
+	HwName                      string `json:"HwName"`
+	IsPresent                   bool   `json:"isPresent"`
+	IsValid                     bool   `json:"isValid"`
+	BusMemberType               int    `json:"busMemberType"`
+	HasDevices                  bool   `json:"hasDevices"`
+	HasMetering                 bool   `json:"hasMetering"`
+	HasBlinking                 bool   `json:"hasBlinking"`
+	VdcConfigURL                string `json:"VdcConfigURL"`
+	VdcModelUID                 string `json:"VdcModelUID"`
+	VdcHardwareGUID             string `json:"vdcHardwareGuid"`
+	VdcHardwareModelGUID        string `json:"vdcHardwareModelGuid"`
+	VdcImplementationID         string `json:"vdcImplementationId"`
+	VdcVendorGUID               string `json:"vdcVendorGuid"`
+	VdcOemGUID                  string `json:"vdcOemGuid"`
+	IgnoreActionsFromNewDevices bool   `json:"ignoreActionsFromNewDevices"`
+	Consumption                 int
+	MeterValue                  int
+}
+
 type Device struct {
 	ID                  string `json:"id"`
 	DisplayID           string `json:"DisplayID"`
@@ -106,9 +138,11 @@ type OutputChannel struct {
 }
 
 type Sensor struct {
-	Type  int  `json:"type"`
-	Valid bool `json:"valid"`
-	Value int  `json:"value"`
+	Type   int     `json:"type"`
+	Valid  bool    `json:"valid"`
+	Value  float64 `json:"value"`
+	Index  int
+	device *Device
 }
 
 type OutputChannelType string

@@ -30,14 +30,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-
-	//	"strconv"
 	"strings"
 
 	"github.com/connctd/digitalstrom"
 )
 
-// node Helper structure to build a tree with leafs (simple string) and child nodes.
+// node Printing helper structure to build a tree with leafs (simple string) and child nodes.
 // will be used to structure the printout for complex objects like devices, channels, etc..
 type node struct {
 	elems  []string
@@ -64,8 +62,11 @@ func main() {
 		switch cmd[0] {
 		case "":
 			break
-		case "get":
-			processGetCommand(&account, cmd)
+		case "request":
+			processRequestCommand(&account, cmd)
+			break
+		case "update":
+			processUpdateCommand(&account, cmd)
 			break
 		case "init":
 			processInitCommand(&account, cmd)
@@ -82,7 +83,6 @@ func main() {
 		case "register":
 			processRegisterCommand(&account, cmd)
 			break
-
 		case "help":
 			printHelp()
 			break
@@ -122,6 +122,7 @@ func processProgramArguments(a *digitalstrom.Account, args []string) {
 func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 	err := a.ApplicationLogin()
 	if err != nil {
+		fmt.Println("Error. Application Login not successful.")
 		fmt.Println(err)
 		return
 	}
@@ -131,12 +132,14 @@ func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 func processInitCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) > 2 {
 		fmt.Println("Too many arguments for init command. init [applicationToken] expected.")
+		return
 	}
 	if len(cmd) == 2 {
 		a.SetApplicationToken(cmd[1])
 	}
 	err := a.Init()
 	if err != nil {
+		fmt.Println("Error. Initialisation not successful.")
 		fmt.Println(err)
 		return
 	}
@@ -158,8 +161,92 @@ func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 	fmt.Println("Your applicaiton token = " + atoken)
 }
 
-func processGetCommand(a *digitalstrom.Account, args []string) {
-	switch args[1] {
+func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 2 {
+		fmt.Println("Error. You have to give a parameter what to get. Type 'help' for a full command list.")
+	}
+	switch cmd[1] {
+	case "consumption":
+		processUpdateConsumptionCmd(a, cmd)
+		break
+	case "meter":
+		processUpdateMeterValueCmd(a, cmd)
+		break
+	case "sensor":
+		processUpdateSensorCmd(a, cmd)
+		break
+	default:
+		fmt.Println("Error, unkonwn parameter for get command '" + cmd[1] + "'.")
+	}
+}
+
+func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 4 {
+		fmt.Println("Error. Bad update sensor command. use -> update sensor <deviceDisplayID> <sensorIndex>")
+	}
+
+	index, err := strconv.Atoi(cmd[3])
+	if err != nil {
+		fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Parameter <sensorIndex> should be a number.")
+		return
+	}
+
+	sensor, err := a.GetSensor(cmd[2], index)
+	if err != nil {
+		fmt.Println("Error, unable to update sensor value. Sensor not found.")
+		fmt.Println(err)
+		return
+	}
+
+	err = a.UpdateSensorValue(sensor)
+	if err != nil {
+		fmt.Println("Error. Unable to update sensor " + strconv.Itoa(index) + " of device " + cmd[2])
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("Sensor updated. New value = " + strconv.FormatFloat(sensor.Value, 'f', 2, 64))
+
+}
+
+func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad get meter command. use -> get meter <circuitDisplayID>")
+	}
+	circuit, ok := a.Circuits[cmd[2]]
+	if !ok {
+		fmt.Println("Unable to find circuit with DisplayID '" + cmd[2] + "'")
+	}
+
+	value, err := a.UpdateCircuitMeterValue(circuit.DisplayID)
+	if err != nil {
+		fmt.Println("Error")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Current metering value of circuit with id '" + circuit.DisplayID + "' = " + strconv.Itoa(value) + " Ws")
+}
+
+func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update consumption command. use -> update consumption <circuitDisplayID>")
+	}
+	circuit, ok := a.Circuits[cmd[2]]
+	if !ok {
+		fmt.Println("Unable to find circuit with DisplayID '" + cmd[2] + "'")
+	}
+
+	value, err := a.UpdateCircuitConsumptionValue(circuit.DisplayID)
+	if err != nil {
+		fmt.Println("Error")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Current consumption of circuit with id '" + circuit.DisplayID + " = " + strconv.Itoa(value) + " W")
+}
+
+func processRequestCommand(a *digitalstrom.Account, cmd []string) {
+	switch cmd[1] {
 	case "structure":
 		_, err := a.RequestStructure()
 		if err != nil {
@@ -168,6 +255,18 @@ func processGetCommand(a *digitalstrom.Account, args []string) {
 			return
 		}
 		fmt.Println("SUCCESS")
+		break
+	case "circuits":
+		_, err := a.RequestCircuits()
+		if err != nil {
+			fmt.Println("Unable to receive circuits")
+			fmt.Println(err)
+			return
+		}
+		fmt.Println("SUCCESS")
+		break
+	default:
+		fmt.Println("Error. " + cmd[1] + " is unknown for get command. Type 'help' for further infos.")
 	}
 }
 func processPrintCommand(a *digitalstrom.Account, cmd []string) {
@@ -221,8 +320,11 @@ func processListCommand(a *digitalstrom.Account, cmd []string) {
 	case "groups":
 		printGroupList(a)
 		break
+	case "circuits":
+		printCircuitList(a)
+		break
 	default:
-		fmt.Println("Error, list'" + cmd[1] + " is unknown")
+		fmt.Println("Error, list '" + cmd[1] + "' is unknown.")
 	}
 }
 
@@ -395,7 +497,13 @@ func generateFloorNode(floor *digitalstrom.Floor) node {
 	n.elems = append(n.elems, "Name       "+floor.Name)
 	n.elems = append(n.elems, "ID         "+strconv.Itoa(floor.ID))
 	n.elems = append(n.elems, "Order      "+strconv.Itoa(floor.Order))
-	//n.elems = append(n.elems, "Zones      "+strconv.FormatBool(zone.IsPresent))
+
+	zoneNode := node{name: "Zonelist"}
+
+	for i := range floor.Zones {
+		zoneNode.elems = append(zoneNode.elems, strconv.Itoa(floor.Zones[i]))
+	}
+	n.childs = append(n.childs, zoneNode)
 
 	return n
 }
@@ -429,7 +537,12 @@ func generateGroupNode(group *digitalstrom.Group) node {
 	n.elems = append(n.elems, "IsPresent        "+strconv.FormatBool(group.IsPresent))
 	n.elems = append(n.elems, "IsValid          "+strconv.FormatBool(group.IsValid))
 
-	///n.elems = append(n.elems, "Devices     "+strconv.group.Devices)
+	devNode := node{name: "Devicelist"}
+
+	for i := range group.Devices {
+		devNode.elems = append(devNode.elems, group.Devices[i])
+	}
+	n.childs = append(n.childs, devNode)
 
 	return n
 }
@@ -451,10 +564,26 @@ func generateDeviceNode(device *digitalstrom.Device) node {
 	n.elems = append(n.elems, "MeterUSID         "+device.MeterDSUID)
 	n.elems = append(n.elems, "MeterName         "+device.MeterName)
 
+	for i := range device.Sensors {
+		n.childs = append(n.childs, generateSensorNode(&device.Sensors[i]))
+	}
+
 	for i := range device.OutputChannels {
 		n.childs = append(n.childs, generateOutputChannelNode(&device.OutputChannels[i]))
 	}
 	return n
+}
+
+func generateSensorNode(sensor *digitalstrom.Sensor) node {
+	n := node{name: "Sensor " + strconv.Itoa(sensor.Index)}
+
+	n.elems = append(n.elems, "Index    "+strconv.Itoa(sensor.Index))
+	n.elems = append(n.elems, "Type     "+strconv.Itoa(sensor.Type))
+	n.elems = append(n.elems, "isValid  "+strconv.FormatBool(sensor.Valid))
+	n.elems = append(n.elems, "Value    "+strconv.FormatFloat(sensor.Value, 'f', 1, 64))
+
+	return n
+
 }
 
 func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
@@ -499,8 +628,13 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("            exit")
 	fmt.Println("            init [applicationToken]")
-	fmt.Println("             get structure")
-	fmt.Println("            list devices")
+	fmt.Println("          update channel <deviceID> <channelType>")
+	fmt.Println("                 consumption <circuitID>")
+	fmt.Println("                 meter <circuitID>")
+	fmt.Println("                 on <deviceID>")
+	fmt.Println("                 sensor <deviceID> <sensorIndex>")
+	fmt.Println("            list circuits")
+	fmt.Println("                 devices")
 	fmt.Println("                 floors")
 	fmt.Println("                 groups")
 	fmt.Println("                 zones")
@@ -514,10 +648,13 @@ func printHelp() {
 	fmt.Println("                 token")
 	fmt.Println("                 zone <zoneID> [depth level]")
 	fmt.Println("        register <username> <password> <application name>")
+	fmt.Println("         request circuits")
+	fmt.Println("                 structure")
 	fmt.Println("             set on <deviceID>")
 	fmt.Println("                 off <deviceID>")
 	fmt.Println("                 channel <deviceID> <channelType> <value>")
 	fmt.Println("                 channels <deviceID> <channelType> <value> [<channelType> <value>]")
+	fmt.Println("                 group <groupID> <value>")
 
 }
 
@@ -577,6 +714,17 @@ func printDeviceList(a *digitalstrom.Account) {
 	}
 	for id, dev := range a.Devices {
 		fmt.Println("   " + id + " " + dev.Name)
+	}
+}
+
+func printCircuitList(a *digitalstrom.Account) {
+	fmt.Println("Circuits")
+	if len(a.Devices) == 0 {
+		fmt.Println("    no Circuits found")
+		return
+	}
+	for id, circuit := range a.Circuits {
+		fmt.Println("   " + id + " " + circuit.Name)
 	}
 }
 

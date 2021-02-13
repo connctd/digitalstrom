@@ -1,9 +1,9 @@
 package digitalstrom
 
 import (
-	//"encode/json"
 	"encoding/json"
 	"errors"
+	"strconv"
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -15,6 +15,7 @@ type Account struct {
 	Groups     map[int]Group
 	Zones      map[int]Zone
 	Floors     map[int]Floor
+	Circuits   map[string]Circuit
 	//Scenes     map[string]Scene
 }
 
@@ -24,10 +25,11 @@ func NewAccount() *Account {
 		Connection: Connection{
 			BaseURL: DEFAULT_BASE_URL,
 		},
-		Devices: make(map[string]Device),
-		Groups:  make(map[int]Group),
-		Zones:   make(map[int]Zone),
-		Floors:  make(map[int]Floor),
+		Devices:  make(map[string]Device),
+		Groups:   make(map[int]Group),
+		Zones:    make(map[int]Zone),
+		Floors:   make(map[int]Floor),
+		Circuits: make(map[string]Circuit),
 	}
 }
 
@@ -54,7 +56,88 @@ func (a *Account) Init() error {
 		return err
 	}
 	_, err = a.RequestStructure()
+	if err != nil {
+		return err
+	}
+	_, err = a.RequestCircuits()
+	if err != nil {
+		return err
+	}
 	return err
+}
+
+func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
+	circuit, ok := a.Circuits[circuitID]
+	if !ok {
+		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
+	}
+
+	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
+	if err != nil {
+		return -1, err
+	}
+	if !res.OK {
+		return -1, errors.New(res.Message)
+	}
+	value, ok := res.Result["meterValue"].(float64)
+	if !ok {
+		return -1, errors.New("unexpected response - no field 'meterValue' found in response")
+	}
+	circuit.MeterValue = int(value)
+	return int(value), nil
+}
+
+func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
+	device, ok := a.Devices[deviceID]
+	if !ok {
+		return nil, errors.New("no device with id '" + deviceID + "' found")
+	}
+	if sensorIndex > len(device.Sensors) {
+		return nil, errors.New("sensorIndex " + strconv.Itoa(sensorIndex) + " out of range for device " + deviceID)
+	}
+	return &device.Sensors[sensorIndex], nil
+}
+
+func (a *Account) UpdateSensorValue(sensor *Sensor) error {
+	params := make(map[string]string)
+	params["dsid"] = sensor.device.ID
+	params["sensorIndex"] = strconv.Itoa(sensor.Index)
+	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
+	if err != nil {
+		return err
+	}
+	if !res.OK {
+		return errors.New(res.Message)
+	}
+
+	value, ok := res.Result["sensorValue"].(float64)
+	if !ok {
+		return errors.New("unable to extract sensorValue from result")
+	}
+	sensor.Value = value
+
+	return nil
+}
+
+func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
+	circuit, ok := a.Circuits[circuitID]
+	if !ok {
+		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
+	}
+
+	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
+	if err != nil {
+		return -1, err
+	}
+	if !res.OK {
+		return -1, errors.New(res.Message)
+	}
+	value, ok := res.Result["consumption"].(float64)
+	if !ok {
+		return -1, errors.New("unexpected response - no field consumption found in response")
+	}
+	circuit.Consumption = int(value)
+	return int(value), nil
 }
 
 // ApplicationLogin uses the assigned applicationToken to generate a session token. The timeout depends on server settings,
@@ -93,6 +176,40 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	return &s, nil
 }
 
+func (a *Account) RequestCircuits() ([]Circuit, error) {
+	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getCircuits")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !res.OK {
+		return nil, errors.New(res.Message)
+	}
+
+	jsonString, err := json.Marshal(res.Result["circuits"])
+
+	if err != nil {
+		return nil, err
+	}
+
+	circuits := []Circuit{}
+	err = json.Unmarshal(jsonString, &circuits)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range circuits {
+		a.Circuits[circuits[i].DisplayID] = circuits[i]
+	}
+
+	return circuits, nil
+}
+
+func (a *Account) completeValues() {
+
+}
+
 func (a *Account) buildMaps() {
 	for i := range a.Structure.Apart.Zones {
 		zone := a.Structure.Apart.Zones[i]
@@ -104,6 +221,10 @@ func (a *Account) buildMaps() {
 		for j := range a.Structure.Apart.Zones[i].Devices {
 			device := a.Structure.Apart.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
+			for n := range device.Sensors {
+				device.Sensors[n].Index = n
+				device.Sensors[n].device = &device
+			}
 		}
 	}
 	for i := range a.Structure.Apart.Floors {
