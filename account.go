@@ -66,6 +66,10 @@ func (a *Account) Init() error {
 	return err
 }
 
+// UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
+// receive the acutal meter value. This value wil be assign to the circuit and additionally
+// returned. In case an error occured during the request, -1 will be return as well as the
+// error itself.
 func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 	circuit, ok := a.Circuits[circuitID]
 	if !ok {
@@ -87,6 +91,8 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 	return int(value), nil
 }
 
+//GetSensor Returning the sensor with die index ID <sensorIndex> of device with display ID <deviceID> or nil when either
+// device with the given ID couldn't be found or the sensor index is higher than the amount of sensors the device has
 func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	device, ok := a.Devices[deviceID]
 	if !ok {
@@ -98,6 +104,8 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
+// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
+// the the sensor.
 func (a *Account) UpdateSensorValue(sensor *Sensor) error {
 	params := make(map[string]string)
 	params["dsid"] = sensor.device.ID
@@ -119,6 +127,9 @@ func (a *Account) UpdateSensorValue(sensor *Sensor) error {
 	return nil
 }
 
+// UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
+// The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
+// return or an error (when ocurred)
 func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 	circuit, ok := a.Circuits[circuitID]
 	if !ok {
@@ -154,7 +165,9 @@ func (a *Account) Register(applicationName string, username string, password str
 	return a.Connection.register(username, password, applicationName)
 }
 
-//
+// RequestStructure performs a getStructure request. The complete Structure will be assigned
+// to the account automatically when request was sucessfull, otherwise the occured error will
+// be returned.
 func (a *Account) RequestStructure() (*Structure, error) {
 
 	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getStructure")
@@ -176,6 +189,9 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	return &s, nil
 }
 
+// RequestCircuits performs a getCircuits request. The received circuit array
+// will be assigned to the account object and additionally returned or the error
+//
 func (a *Account) RequestCircuits() ([]Circuit, error) {
 	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getCircuits")
 
@@ -206,10 +222,9 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 	return circuits, nil
 }
 
-func (a *Account) completeValues() {
-
-}
-
+// buldMaps is generating maps for devices, circuits, zones, groups
+// and floors for fast access. It should be called whenever a structure,
+// circuit or groups are requested
 func (a *Account) buildMaps() {
 	for i := range a.Structure.Apart.Zones {
 		zone := a.Structure.Apart.Zones[i]

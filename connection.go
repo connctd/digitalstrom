@@ -18,16 +18,25 @@ const (
 	DEFAULT_BASE_URL = "https://192.168.178.178:8080"
 )
 
+// RequestError structure to give a proper error that could occur during
+// http requests
 type RequestError struct {
 	Err        string
 	StatusCode int
 	Request    http.Request
 }
 
+// Error function of structure RequestError
 func (e *RequestError) Error() string {
 	return fmt.Sprintf("connection error - status code &status", strconv.Itoa(e.StatusCode))
 }
 
+// RequestResult represents all successful http request results received
+// from the digitalStrom server. It always contains the OK value as idication
+// whether the requested data could be delivered or not. When OK is true, RequestResult
+// contains Result, the requested data as json (map[string]interface{}). When
+// OK is false, RequestResult contains Message, the problem desription the digitalStrom had
+// for not delivering the requested data.
 type RequestResult struct {
 	OK      bool                   `json:"ok"`
 	Message string                 `json:"message"`
