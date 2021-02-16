@@ -82,7 +82,7 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
 	}
 
-	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
 	if err != nil {
 		return -1, err
 	}
@@ -117,7 +117,7 @@ func (a *Account) UpdateSensorValue(sensor *Sensor) error {
 	params := make(map[string]string)
 	params["dsid"] = sensor.device.ID
 	params["sensorIndex"] = strconv.Itoa(sensor.Index)
-	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
 	}
 
-	res, err := a.Connection.doRequest(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
 	if err != nil {
 		return -1, err
 	}
@@ -203,6 +203,26 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	return &s, nil
 }
 
+// RequestSystemInfo performs a get system/version request and returns the result or
+// the error that has been occurred
+func (a *Account) RequestSystemInfo() (*System, error) {
+	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/system/version")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !res.OK {
+		return nil, errors.New(res.Message)
+	}
+	jsonString, _ := json.Marshal(res.Result)
+
+	s := System{}
+	json.Unmarshal(jsonString, &s)
+
+	return &s, nil
+}
+
 // RequestCircuits performs a getCircuits request. The received circuit array
 // will be assigned to the account object and additionally returned or the error
 //
@@ -248,7 +268,7 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 		url = "/json/device/turnOff"
 	}
 
-	res, err := a.Connection.doRequest(a.Connection.BaseURL+url, get, "", map[string]string{"dsid": device.ID})
+	res, err := a.Connection.Request(a.Connection.BaseURL+url, get, "", map[string]string{"dsid": device.ID})
 	if err != nil {
 		return err
 	}

@@ -48,7 +48,7 @@ type Zone struct {
 	Groups    []Group  `json:"groups"`
 }
 
-// Floor ...
+// Floor
 type Floor struct {
 	ID    int    `json:"id"`
 	Order int    `json:"order"`
@@ -180,6 +180,17 @@ type Sensor struct {
 	Value  float64    `json:"value"`
 	Index  int
 	device *Device
+}
+
+// System ...
+type System struct {
+	Version       string `json:"version"`
+	DistroVersion string `json:"distroVersion"`
+	EthernetID    string `json:"EthernetID"`
+	Hardware      string `json:"Hardware"`
+	Kernel        string `json:"Kernel"`
+	Revision      string `json:"Revision"`
+	Serial        string `json:"Serial"`
 }
 
 // OutputChannelType ...
