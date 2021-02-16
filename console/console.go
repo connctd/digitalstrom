@@ -2,22 +2,23 @@ package main
 
 /*
 *
-
-    ***
- ***   ****
-**       ** **        **
-		    ****   ***
-		        ***
-d i g i t a l S T R O M
-
+								       _ _       _ _        _  _____ _______ _____   ____  __  __
+	    ***							  | (_)     (_) |      | |/ ____|__   __|  __ \ / __ \|  \/  |
+ 	***   ****						__| |_  __ _ _| |_ __ _| | (___    | |  | |__) | |  | | \  / |
+   **       ** **        **	       / _` | |/ _` | | __/ _` | |\___ \   | |  |  _  /| |  | | |\/| |
+		    	****   ***	      | (_| | | (_| | | || (_| | |____) |  | |  | | \ \| |__| | |  | |
+		        	***	           \__,_|_|\__, |_|\__\__,_|_|_____/   |_|  |_|  \_\\____/|_|  |_|
+                    	                    __/ |
+					  					   |___/                                           CONSOLE
 
 *	Console file is not needed for using the library. It contains console utilities that allows a
-*   stand-alone usage of the library on the terminal. It could be seen as reference implementations
+*   stand-alone usage of the library for the terminal. It could be seen as reference implementation
 *   for demonstrating the usage of that library.
 *
 *	Structure of this file:			console.go  ┐
 *												├ main()
-*												├ Helper Functions that are not related to Command Processing, Node Generation or Printing
+*												├ Helper Functions that are not related to Command
+*												| Processing, Node Generation or Printing
 *												├ Command Processing
 *												├ Node Generation
 *												└ Printing
@@ -47,6 +48,7 @@ func main() {
 	printWelcomeMsg()
 
 	account := *digitalstrom.NewAccount()
+	// TODO: delete this after developement
 	account.SetApplicationToken("a49c2cdd96b62681bdf846b54f8fcc23cda575c59d81e6d63a6e5085347eb8a2")
 
 	// evaluate program arguments
@@ -86,6 +88,9 @@ func main() {
 		case "help":
 			printHelp()
 			break
+		case "set":
+			processSetCommand(&account, cmd)
+			break
 		case "exit":
 			printByeMsg()
 			os.Exit(0)
@@ -116,7 +121,14 @@ func processProgramArguments(a *digitalstrom.Account, args []string) {
 		}
 		a.SetApplicationToken(args[1])
 		break
+	case "-url":
+		break
+	case "-help":
+		printProgramArguments()
+		os.Exit(0)
+		break
 	}
+
 }
 
 func processLoginCommand(a *digitalstrom.Account, cmd []string) {
@@ -175,9 +187,37 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 	case "sensor":
 		processUpdateSensorCmd(a, cmd)
 		break
+	case "on":
+		processUpdateOnCmd(a, cmd)
+		break
 	default:
-		fmt.Println("Error, unkonwn parameter for get command '" + cmd[1] + "'.")
+		fmt.Println("Error, unkonwn parameter for update command '" + cmd[1] + "'.")
 	}
+}
+
+func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update on command. use -> update on <deviceDisplayID>")
+	}
+
+	dev, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Println("Error. Device with id '" + cmd[2] + " not found.")
+	}
+
+	val, err := a.UpdateOnValue(&dev)
+	if err != nil {
+		fmt.Println("Error. Unable to update On value for device '" + cmd[2] + "'")
+		fmt.Println(err)
+		return
+	}
+
+	if val {
+		fmt.Println("Device is ON")
+	} else {
+		fmt.Println("Device is OFF")
+	}
+
 }
 
 func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
@@ -269,6 +309,41 @@ func processRequestCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println("Error. " + cmd[1] + " is unknown for get command. Type 'help' for further infos.")
 	}
 }
+
+func processSetCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) == 1 {
+		fmt.Println("\r\rError. Not a valid set command. Type 'help' for complete command descriptions.")
+		return
+	}
+
+	switch cmd[1] {
+	case "on":
+		processSetOnCommand(a, cmd, true)
+		break
+	case "off":
+		processSetOnCommand(a, cmd, false)
+		break
+	}
+}
+
+func processSetOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
+	if len(cmd) != 3 {
+		fmt.Println("\r\rError. Not a valid set on|off command. Use -> set on|off <deviceID>.")
+		return
+	}
+	dev, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Println("Error. Device with display ID '" + cmd[2] + "' not found.")
+	}
+	err := a.TurnOn(&dev, on)
+	if err != nil {
+		fmt.Println("Error. Unable to set device '" + cmd[2] + "' on|off")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("OK")
+}
+
 func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) == 1 {
 		fmt.Println("\r\rError. Not a valid print command. use -> print <what to print>. Type 'print help' for complete command description.")
@@ -532,7 +607,7 @@ func generateGroupNode(group *digitalstrom.Group) node {
 
 	n.elems = append(n.elems, "ID               "+strconv.Itoa(group.ID))
 	n.elems = append(n.elems, "Name             "+group.Name)
-	n.elems = append(n.elems, "ApplicationType  "+strconv.Itoa(group.ApplicationType))
+	n.elems = append(n.elems, "ApplicationType  "+strconv.Itoa(group.ApplicationType.GetID())+" "+group.ApplicationType.GetName())
 	n.elems = append(n.elems, "Color            "+strconv.Itoa(group.Color))
 	n.elems = append(n.elems, "IsPresent        "+strconv.FormatBool(group.IsPresent))
 	n.elems = append(n.elems, "IsValid          "+strconv.FormatBool(group.IsValid))
@@ -553,6 +628,7 @@ func generateDeviceNode(device *digitalstrom.Device) node {
 	n.elems = append(n.elems, "Name              "+device.Name)
 	n.elems = append(n.elems, "ID                "+device.ID)
 	n.elems = append(n.elems, "UUID              "+device.UUID)
+	n.elems = append(n.elems, "On                "+strconv.FormatBool(device.On))
 	n.elems = append(n.elems, "AKMIInputProperty "+device.AKMInputProperty)
 	n.elems = append(n.elems, "BinaryInputCount  "+strconv.Itoa(device.BinaryInputCount))
 	n.elems = append(n.elems, "DispayID          "+device.DisplayID)
@@ -571,6 +647,10 @@ func generateDeviceNode(device *digitalstrom.Device) node {
 	for i := range device.OutputChannels {
 		n.childs = append(n.childs, generateOutputChannelNode(&device.OutputChannels[i]))
 	}
+
+	for i := range device.BinaryInputs {
+		n.childs = append(n.childs, generateBinaryInputNode(&device.BinaryInputs[i]))
+	}
 	return n
 }
 
@@ -586,12 +666,22 @@ func generateSensorNode(sensor *digitalstrom.Sensor) node {
 
 }
 
+func generateBinaryInputNode(binInput *digitalstrom.BinaryInput) node {
+	n := node{name: "Binary Input " + strconv.Itoa(binInput.InputID)}
+
+	n.elems = append(n.elems, "InputID      "+strconv.Itoa(binInput.InputID))
+	n.elems = append(n.elems, "InputType    "+strconv.Itoa(binInput.InputType.GetID())+" "+binInput.InputType.GetName())
+	n.elems = append(n.elems, "State        "+strconv.Itoa(binInput.State))
+	n.elems = append(n.elems, "TargetGroup  "+strconv.Itoa(binInput.TargetGroup))
+	return n
+}
+
 func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
-	n := node{name: "Channel " + channel.ChannelType}
+	n := node{name: "Channel " + string(channel.ChannelType)}
 
 	n.elems = append(n.elems, "Name  "+channel.ChannelName)
 	n.elems = append(n.elems, "ID    "+channel.ChannelID)
-	n.elems = append(n.elems, "Type  "+channel.ChannelType)
+	n.elems = append(n.elems, "Type  "+string(channel.ChannelType))
 	n.elems = append(n.elems, "Index "+strconv.Itoa(channel.ChannelIndex))
 
 	return n
@@ -600,20 +690,27 @@ func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
 
 // --------------------------- Printing ----------------------------------
 
+func printProgramArguments() {
+	fmt.Println("Please make use of the following comamnd: console [-at] [-srv] [--help]")
+	fmt.Println()
+	fmt.Println("      -at     set the application token")
+	fmt.Println("      -srv    set the server address (including protocol and port)")
+	fmt.Println("      --help  prints this help screen")
+	fmt.Println()
+}
+
 func printWelcomeMsg() {
 	fmt.Println()
-
 	fmt.Println("====================================================================================================================")
-	fmt.Println()
-	fmt.Println("          ____  _       _ __        _______ __                          __    _ __                         	    ")
-	fmt.Println("         / __ \\(_)___ _(_) /_____ _/ / ___// /__________  ____ ___     / /   (_) /_  _________ ________  __       ")
-	fmt.Println("        / / / / / __ `/ / __/ __ `/ /\\__ \\/ __/ ___/ __ \\/ __ `__ \\   / /   / / __ \\/ ___/ __ `/ ___/ / / /   ")
-	fmt.Println("       / /_/ / / /_/ / / /_/ /_/ / /___/ / /_/ /  / /_/ / / / / / /  / /___/ / /_/ / /  / /_/ / /  / /_/ /         ")
-	fmt.Println("      /_____/_/\\__, /_/\\__/\\__,_/_//____/\\__/_/   \\____/_/ /_/ /_/  /_____/_/_.___/_/   \\__,_/_/   \\__, /   ")
-	fmt.Println("              /____/                                                                              /____/           ")
-	fmt.Println()
+	fmt.Println("               ___       _ __        _________________  ____  __  ___   ___ __                         ")
+	fmt.Println("          ____/ (_)___ _(_) /_____ _/ / ___/_  __/ __ \\/ __ \\/  |/  /  / (_) /_  _________ ________  __")
+	fmt.Println("         / __  / / __ `/ / __/ __ `/ /\\__ \\ / / / /_/ / / / / /|_/ /  / / / __ \\/ ___/ __ `/ ___/ / / /")
+	fmt.Println("        / /_/ / / /_/ / / /_/ /_/ / /___/ // / / _, _/ /_/ / /  / /  / / / /_/ / /  / /_/ / /  / /_/ / ")
+	fmt.Println("        \\__,_/_/\\__, /_/\\__/\\__,_/_//____//_/ /_/ |_|\\____/_/  /_/  /_/_/_.___/_/   \\__,_/_/   \\__, /  ")
+	fmt.Println("               /____/                                                                         /____/   ")
 	fmt.Println("===================================================================================================================")
-	fmt.Println("                                                                           powered by IoT connctd - " + "\033[1;37m" + "www.connctd.com")
+	fmt.Println("                                                                           powered by IoT connctd - " + "\033[1;37m" + "www.connctd.com\033[0m")
+
 }
 
 func printByeMsg() {

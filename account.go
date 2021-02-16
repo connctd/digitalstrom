@@ -19,7 +19,8 @@ type Account struct {
 	//Scenes     map[string]Scene
 }
 
-// NewAccount set connection baseURL to default and returns Account
+// NewAccount sets connection baseURL to default, generates maps and returns
+// empty Account instance
 func NewAccount() *Account {
 	return &Account{
 		Connection: Connection{
@@ -66,6 +67,11 @@ func (a *Account) Init() error {
 	return err
 }
 
+// UpdateOnValue ...
+func (a *Account) UpdateOnValue(device *Device) (bool, error) {
+	return false, errors.New("not implemented yet")
+}
+
 // UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
 // receive the acutal meter value. This value wil be assign to the circuit and additionally
 // returned. In case an error occured during the request, -1 will be return as well as the
@@ -98,7 +104,7 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	if !ok {
 		return nil, errors.New("no device with id '" + deviceID + "' found")
 	}
-	if sensorIndex > len(device.Sensors) {
+	if sensorIndex >= len(device.Sensors) {
 		return nil, errors.New("sensorIndex " + strconv.Itoa(sensorIndex) + " out of range for device " + deviceID)
 	}
 	return &device.Sensors[sensorIndex], nil
@@ -185,7 +191,11 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	json.Unmarshal(jsonString, &s)
 
 	a.Structure = s
+	// We have received the complete structure tree
+	// For fast access, the account has maps for devices, groups, etc..
+	// these maps need to be filled
 	a.buildMaps()
+	// return the shit
 	return &s, nil
 }
 
@@ -202,7 +212,7 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 	if !res.OK {
 		return nil, errors.New(res.Message)
 	}
-
+	// get result as map[string]interface{}
 	jsonString, err := json.Marshal(res.Result["circuits"])
 
 	if err != nil {
@@ -210,16 +220,40 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 	}
 
 	circuits := []Circuit{}
+	// let json.Unmarshal do the job of mapping to Circuit
 	err = json.Unmarshal(jsonString, &circuits)
 	if err != nil {
 		return nil, err
 	}
 
+	// fill the circuit map for fast access
 	for i := range circuits {
 		a.Circuits[circuits[i].DisplayID] = circuits[i]
 	}
-
+	// there we are, return everything
 	return circuits, nil
+}
+
+// TurnOn sends eithe a turnOn or turnOff request for the given 'device', depending on value of paramter 'on'
+func (a *Account) TurnOn(device *Device, on bool) error {
+
+	var url = ""
+	if on {
+		url = "/json/device/turnOn"
+	} else {
+		url = "/json/device/turnOff"
+	}
+
+	res, err := a.Connection.doRequest(a.Connection.BaseURL+url, get, "", map[string]string{"dsid": device.ID})
+	if err != nil {
+		return err
+	}
+
+	if !res.OK {
+		return errors.New(res.Message)
+	}
+
+	return nil
 }
 
 // buldMaps is generating maps for devices, circuits, zones, groups

@@ -28,7 +28,7 @@ type RequestError struct {
 
 // Error function of structure RequestError
 func (e *RequestError) Error() string {
-	return fmt.Sprintf("connection error - status code &status", strconv.Itoa(e.StatusCode))
+	return fmt.Sprintf("connection error - status code %status", strconv.Itoa(e.StatusCode))
 }
 
 // RequestResult represents all successful http request results received
