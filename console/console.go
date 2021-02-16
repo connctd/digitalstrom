@@ -138,7 +138,8 @@ func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Login successful - new session token = " + a.Connection.SessionToken)
+
+	fmt.Printf("Login successful - new session token = %s\r\n", a.Connection.SessionToken)
 }
 
 func processInitCommand(a *digitalstrom.Account, cmd []string) {
@@ -169,8 +170,8 @@ func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Applicaiton with name " + cmd[3] + " registered.")
-	fmt.Println("Your applicaiton token = " + atoken)
+	fmt.Printf("Applicaiton with name '%s' registered.\r\n", cmd[3])
+	fmt.Printf("Your applicaiton token = %s", atoken)
 }
 
 func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
@@ -191,7 +192,7 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processUpdateOnCmd(a, cmd)
 		break
 	default:
-		fmt.Println("Error, unkonwn parameter for update command '" + cmd[1] + "'.")
+		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
 }
 
@@ -202,12 +203,12 @@ func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 
 	dev, ok := a.Devices[cmd[2]]
 	if !ok {
-		fmt.Println("Error. Device with id '" + cmd[2] + " not found.")
+		fmt.Printf("Error. Device with id '%s' not found.\r\n", cmd[2])
 	}
 
 	val, err := a.UpdateOnValue(&dev)
 	if err != nil {
-		fmt.Println("Error. Unable to update On value for device '" + cmd[2] + "'")
+		fmt.Printf("Error. Unable to update On value for device '%s'.\r\n", cmd[2])
 		fmt.Println(err)
 		return
 	}
@@ -227,7 +228,7 @@ func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 
 	index, err := strconv.Atoi(cmd[3])
 	if err != nil {
-		fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Parameter <sensorIndex> should be a number.")
+		fmt.Printf("\n\rError. '%s' is not a number. Parameter <sensorIndex> should be a number.\r\n", cmd[3])
 		return
 	}
 
@@ -240,12 +241,12 @@ func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 
 	err = a.UpdateSensorValue(sensor)
 	if err != nil {
-		fmt.Println("Error. Unable to update sensor " + strconv.Itoa(index) + " of device " + cmd[2])
+		fmt.Printf("Error. Unable to update sensor '%d' of device '%s'.\r\n", index, cmd[2])
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println("Sensor updated. New value = " + strconv.FormatFloat(sensor.Value, 'f', 2, 64))
+	fmt.Printf("Sensor updated. New value = %.2f\r\n", sensor.Value)
 
 }
 
@@ -255,7 +256,8 @@ func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
 	}
 	circuit, ok := a.Circuits[cmd[2]]
 	if !ok {
-		fmt.Println("Unable to find circuit with DisplayID '" + cmd[2] + "'")
+		fmt.Printf("Unable to find circuit with displayID '%s'.\r\n", cmd[2])
+		return
 	}
 
 	value, err := a.UpdateCircuitMeterValue(circuit.DisplayID)
@@ -273,7 +275,7 @@ func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
 	}
 	circuit, ok := a.Circuits[cmd[2]]
 	if !ok {
-		fmt.Println("Unable to find circuit with DisplayID '" + cmd[2] + "'")
+		fmt.Printf("Unable to find circuit with displayID '%s'\r\n", cmd[2])
 	}
 
 	value, err := a.UpdateCircuitConsumptionValue(circuit.DisplayID)
@@ -282,7 +284,7 @@ func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Current consumption of circuit with id '" + circuit.DisplayID + " = " + strconv.Itoa(value) + " W")
+	fmt.Printf("Current consumption of circuit with id '%s' = %dW\r\n", circuit.DisplayID, value)
 }
 
 func processRequestCommand(a *digitalstrom.Account, cmd []string) {
@@ -306,7 +308,7 @@ func processRequestCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println("SUCCESS")
 		break
 	default:
-		fmt.Println("Error. " + cmd[1] + " is unknown for get command. Type 'help' for further infos.")
+		fmt.Printf("Error. '%s' is unknown for get command. Type 'help' for further infos.\r\n", cmd[1])
 	}
 }
 
@@ -333,11 +335,11 @@ func processSetOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
 	}
 	dev, ok := a.Devices[cmd[2]]
 	if !ok {
-		fmt.Println("Error. Device with display ID '" + cmd[2] + "' not found.")
+		fmt.Printf("Error. Device with display ID '%s' not found.\r\n", cmd[1])
 	}
 	err := a.TurnOn(&dev, on)
 	if err != nil {
-		fmt.Println("Error. Unable to set device '" + cmd[2] + "' on|off")
+		fmt.Printf("Error. Unable to set device '%s' on|off.\r\n", cmd[2])
 		fmt.Println(err)
 		return
 	}
@@ -369,11 +371,11 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 		processPrintGroupCmd(a, cmd)
 		break
 	case "token":
-		fmt.Println("  appication token = " + a.Connection.ApplicationToken)
-		fmt.Println("     session token = " + a.Connection.SessionToken)
+		fmt.Printf("  appication token = %s\r\n", a.Connection.ApplicationToken)
+		fmt.Printf("     session token = %s\r\n", a.Connection.SessionToken)
 		break
 	default:
-		fmt.Println(" Error. Unknown parameter '" + cmd[1] + "' for print command.")
+		fmt.Printf(" Error. Unknown parameter '%s' for print command.\r\n", cmd[1])
 	}
 }
 
@@ -399,7 +401,7 @@ func processListCommand(a *digitalstrom.Account, cmd []string) {
 		printCircuitList(a)
 		break
 	default:
-		fmt.Println("Error, list '" + cmd[1] + "' is unknown.")
+		fmt.Printf("Error, list '%s' is unknown.\r\n", cmd[1])
 	}
 }
 
@@ -412,7 +414,7 @@ func processPrintStructureCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) == 3 {
 		s, err := strconv.Atoi(cmd[2])
 		if err != nil {
-			fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Level of depth expected")
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as number expected.\r\n", cmd[2])
 			return
 		}
 		printStructure(a, s+1)
@@ -433,20 +435,20 @@ func processPrintZoneCmd(a *digitalstrom.Account, cmd []string) {
 
 	id, err := strconv.Atoi(cmd[2])
 	if err != nil {
-		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Zone ID must be a number")
+		fmt.Printf("\n\rError. '%s' is not a number. Zone ID must be a number.\r\n", cmd[2])
 		return
 	}
 
 	zone, ok := a.Zones[id]
 	if !ok {
-		fmt.Println("\n\rError. Zone with id '" + cmd[2] + "' was not found. ")
+		fmt.Printf("\n\rError. Zone with id '%s' was not found.\r\n", cmd[2])
 		return
 	}
 	node := generateZoneNode(&zone)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
-			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as number expected.\r\n", cmd[3])
 			return
 		}
 		printNode("", "", true, &node, l+1)
@@ -467,20 +469,20 @@ func processPrintGroupCmd(a *digitalstrom.Account, cmd []string) {
 
 	id, err := strconv.Atoi(cmd[2])
 	if err != nil {
-		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Group ID must be a number")
+		fmt.Printf("\n\rError. '%s' is not a number. Group ID must be a number. \r\n", cmd[2])
 		return
 	}
 
 	group, ok := a.Groups[id]
 	if !ok {
-		fmt.Println("\n\rError. Group with id '" + cmd[2] + "' was not found. ")
+		fmt.Printf("\n\rError. Group with id '%s' could not be found.\r\n", cmd[2])
 		return
 	}
 	node := generateGroupNode(&group)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
-			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as number expected.\r\n", cmd[3])
 			return
 		}
 		printNode("", "", true, &node, l+1)
@@ -501,20 +503,20 @@ func processPrintFloorCmd(a *digitalstrom.Account, cmd []string) {
 
 	id, err := strconv.Atoi(cmd[2])
 	if err != nil {
-		fmt.Println("\n\rError. '" + cmd[2] + "' is not a number. Floor ID must be a number")
+		fmt.Printf("\n\rError. '%s' is not a number. Floor ID must be a number.\r\n", cmd[2])
 		return
 	}
 
 	floor, ok := a.Floors[id]
 	if !ok {
-		fmt.Println("\n\rError. Floor with id '" + cmd[2] + "' was not found. ")
+		fmt.Printf("\n\rError. Floor with id '%s' was not found.\r\n", cmd[2])
 		return
 	}
 	node := generateFloorNode(&floor)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
-			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as number expected. \r\n", cmd[3])
 			return
 		}
 		printNode("", "", true, &node, l+1)
@@ -534,14 +536,14 @@ func processPrintDeviceCmd(a *digitalstrom.Account, cmd []string) {
 	}
 	device, ok := a.Devices[cmd[2]]
 	if !ok {
-		fmt.Println("\n\rError. Device with displayID '" + cmd[2] + "' was not found. ")
+		fmt.Printf("\n\rError. Device with displayID '%s' could not be found.\r\n", cmd[2])
 		return
 	}
 	node := generateDeviceNode(&device)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
-			fmt.Println("\n\rError. '" + cmd[3] + "' is not a number. Level of depth expected")
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as mumber expected.\r\n", cmd[3])
 			return
 		}
 		printNode("", "", true, &node, l+1)
