@@ -305,6 +305,22 @@ func processRequestCommand(a *digitalstrom.Account, cmd []string) {
 		}
 		fmt.Println("SUCCESS")
 		break
+	case "system":
+		system, err := a.RequestSystemInfo()
+		if err != nil {
+			fmt.Println("Unable to request system info.")
+			fmt.Println(err)
+		}
+		fmt.Println()
+		fmt.Println("System Information:")
+		fmt.Printf("                  Version %s/r/n", system.Version)
+		fmt.Printf("            distroVersion %s\r\n", system.DistroVersion)
+		fmt.Printf("               EthernetID %s\r\n", system.EthernetID)
+		fmt.Printf("                 Hardware %s\r\n", system.Hardware)
+		fmt.Printf("                   Kernel %s\r\n", system.Kernel)
+		fmt.Printf("                 Revision %s\r\n", system.Revision)
+		fmt.Printf("                   Serial %s\r\n", system.Serial)
+		break
 	default:
 		fmt.Printf("Error. '%s' is unknown for get command. Type 'help' for further infos.\r\n", cmd[1])
 	}
@@ -849,6 +865,7 @@ func printHelp() {
 	fmt.Println("        register <username> <password> <application name>")
 	fmt.Println("         request circuits")
 	fmt.Println("                 structure")
+	fmt.Println("                 system")
 	fmt.Println("             set on <deviceID>")
 	fmt.Println("                 off <deviceID>")
 	fmt.Println("                 channel <deviceID> <channelType> <value>")
