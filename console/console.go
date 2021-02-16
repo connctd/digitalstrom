@@ -48,8 +48,6 @@ func main() {
 	printWelcomeMsg()
 
 	account := *digitalstrom.NewAccount()
-	// TODO: delete this after developement
-	account.SetApplicationToken("a49c2cdd96b62681bdf846b54f8fcc23cda575c59d81e6d63a6e5085347eb8a2")
 
 	// evaluate program arguments
 	argsWithoutProg := os.Args[1:]
