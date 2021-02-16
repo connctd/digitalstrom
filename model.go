@@ -10,7 +10,7 @@ import (
 // Structure represents the digitalSTROM structure of
 // an installation.
 type Structure struct {
-	Apart Apartment `json:"apartment"`
+	Apartment Apartment `json:"apartment"`
 }
 
 // Apartment is the ogical instance of a digitalSTROM instalation. This includes
@@ -158,9 +158,9 @@ type OutputChannel struct {
 
 // Sensor ...
 type Sensor struct {
-	Type   int     `json:"type"`
-	Valid  bool    `json:"valid"`
-	Value  float64 `json:"value"`
+	Type   SensorType `json:"type"`
+	Valid  bool       `json:"valid"`
+	Value  float64    `json:"value"`
 	Index  int
 	device *Device
 }
@@ -176,6 +176,9 @@ type ApplicationColor string
 
 // BinaryInputType ...
 type BinaryInputType int
+
+// SensorType ...
+type SensorType int
 
 // Output Channel Types (OTC)
 const (
@@ -258,6 +261,40 @@ const (
 	BITservice               BinaryInputType = 23
 )
 
+// SensorTypes
+const (
+	STtemperature                      SensorType = 66
+	STrelativeHumidity                 SensorType = 68
+	STbrightness                       SensorType = 67
+	STsoundPressureLeve                SensorType = 25
+	STroomTemperature                  SensorType = 9
+	STroomRelativeHumidity             SensorType = 13
+	STroomBrightness                   SensorType = 11
+	STroomCarbonDioxideConcentration   SensorType = 21
+	STroomCarbonMonoxideConcentration  SensorType = 22
+	STroomTemperatureSetPoint          SensorType = 50
+	STroomTemperatureControlVariable   SensorType = 51
+	SToutdoorTemperature               SensorType = 10
+	SToutdoorRelativeHumidity          SensorType = 14
+	SToutdoorBrightness                SensorType = 12
+	STairPressure                      SensorType = 15
+	STwindGustSpeed                    SensorType = 16
+	STwindGustDirection                SensorType = 17
+	STwindSpeed                        SensorType = 18
+	STwindDirection                    SensorType = 19
+	STprecipitationIntensityOfLastHour SensorType = 20
+	STsunAzimuth                       SensorType = 76
+	STsunElevation                     SensorType = 77
+	STactivePower                      SensorType = 4
+	STapparentPower                    SensorType = 65
+	SToutputCurrent                    SensorType = 5
+	SToutputCurrentHighRange           SensorType = 64
+	STelectricMeter                    SensorType = 6
+	STlength                           SensorType = 73
+	STmass                             SensorType = 74
+	STduration                         SensorType = 75
+)
+
 // GetID returns the id of the binary input type
 func (b BinaryInputType) GetID() int {
 	return int(b)
@@ -337,6 +374,79 @@ func (at ApplicationType) GetName() string {
 	}
 	return "unknown application type"
 
+}
+
+// GetID returns the identifier of the sensor type
+func (st SensorType) GetID() int {
+	return int(st)
+}
+
+// GetName returns a name of the sensor type
+func (st SensorType) GetName() string {
+	switch st {
+	case STtemperature:
+		return "Temperature"
+	case STrelativeHumidity:
+		return "Relative Humidity"
+	case STbrightness:
+		return "Brightness"
+	case STsoundPressureLeve:
+		return "Sound Pressure"
+	case STroomTemperature:
+		return "Room Temperature"
+	case STroomRelativeHumidity:
+		return "Room Relative Humidity"
+	case STroomBrightness:
+		return "Room Brightness"
+	case STroomCarbonDioxideConcentration:
+		return "Room Carbon Dioxide Concentration"
+	case STroomCarbonMonoxideConcentration:
+		return "Room Carbon Monoxide Concentration"
+	case STroomTemperatureSetPoint:
+		return "Room Temperature Set-Point"
+	case STroomTemperatureControlVariable:
+		return "Room Temperature Control Variable"
+	case SToutdoorTemperature:
+		return "Outdoor Temperature"
+	case SToutdoorRelativeHumidity:
+		return "Outdoor Relative Humidity"
+	case SToutdoorBrightness:
+		return "Outdoor Brightness"
+	case STairPressure:
+		return "Air Pressure"
+	case STwindGustSpeed:
+		return "Wind Gust Speed"
+	case STwindGustDirection:
+		return "Wind Gust Direction"
+	case STwindSpeed:
+		return "Wind Speed"
+	case STwindDirection:
+		return "Wind Direction"
+	case STprecipitationIntensityOfLastHour:
+		return "Precipitation Intensity Of Last Hour"
+	case STsunAzimuth:
+		return "Sun Azimuth"
+	case STsunElevation:
+		return "Sun Elevation"
+	case STactivePower:
+		return "Active Power"
+	case STapparentPower:
+		return "Apperent Power"
+	case SToutputCurrent:
+		return "Output Current"
+	case SToutputCurrentHighRange:
+		return "Output Current (High Range)"
+	case STelectricMeter:
+		return "Electric Meter"
+	case STlength:
+		return "Length"
+	case STmass:
+		return "Mass"
+	case STduration:
+		return "Duration"
+	default:
+		return "Unknown SensorType"
+	}
 }
 
 // GenerateApartment takes a json string and generates and returns an instance of structure Apartment

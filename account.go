@@ -94,6 +94,7 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 		return -1, errors.New("unexpected response - no field 'meterValue' found in response")
 	}
 	circuit.MeterValue = int(value)
+	a.Circuits[circuitID] = circuit
 	return int(value), nil
 }
 
@@ -153,7 +154,10 @@ func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 	if !ok {
 		return -1, errors.New("unexpected response - no field consumption found in response")
 	}
+
 	circuit.Consumption = int(value)
+	a.Circuits[circuitID] = circuit
+
 	return int(value), nil
 }
 
@@ -260,15 +264,15 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 // and floors for fast access. It should be called whenever a structure,
 // circuit or groups are requested
 func (a *Account) buildMaps() {
-	for i := range a.Structure.Apart.Zones {
-		zone := a.Structure.Apart.Zones[i]
+	for i := range a.Structure.Apartment.Zones {
+		zone := a.Structure.Apartment.Zones[i]
 		a.Zones[zone.ID] = zone
-		for j := range a.Structure.Apart.Zones[i].Groups {
-			group := a.Structure.Apart.Zones[i].Groups[j]
+		for j := range a.Structure.Apartment.Zones[i].Groups {
+			group := a.Structure.Apartment.Zones[i].Groups[j]
 			a.Groups[group.ID] = group
 		}
-		for j := range a.Structure.Apart.Zones[i].Devices {
-			device := a.Structure.Apart.Zones[i].Devices[j]
+		for j := range a.Structure.Apartment.Zones[i].Devices {
+			device := a.Structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
 			for n := range device.Sensors {
 				device.Sensors[n].Index = n
@@ -276,8 +280,8 @@ func (a *Account) buildMaps() {
 			}
 		}
 	}
-	for i := range a.Structure.Apart.Floors {
-		floor := a.Structure.Apart.Floors[i]
+	for i := range a.Structure.Apartment.Floors {
+		floor := a.Structure.Apartment.Floors[i]
 		a.Floors[floor.ID] = floor
 	}
 }

@@ -361,6 +361,16 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	case "device":
 		processPrintDeviceCmd(a, cmd)
 		break
+	case "devices":
+		processPrintDevicesCmd(a, cmd)
+		break
+	case "circuit":
+		processPrintCircuitCmd(a, cmd)
+		break
+	case "circuits":
+		processPrintCircuitsCmd(a, cmd)
+		break
+
 	case "floor":
 		processPrintFloorCmd(a, cmd)
 		break
@@ -552,6 +562,59 @@ func processPrintDeviceCmd(a *digitalstrom.Account, cmd []string) {
 	printNode("", "", true, &node, -1)
 }
 
+func processPrintDevicesCmd(a *digitalstrom.Account, cmd []string) {
+	node := generateDevicesNode(a)
+
+	if len(cmd) == 3 {
+		l, err := strconv.Atoi(cmd[2])
+		if err != nil {
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as mumber expected.\r\n", cmd[2])
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintCircuitCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) <= 2 {
+		fmt.Println("Error. Bad print circuit command. Use -> print cuircuit <circuitID> [level of depth]")
+	}
+	circuit, ok := a.Circuits[cmd[2]]
+	if !ok {
+		fmt.Printf("\r\nError. Unable to find circuit with id '%s'.\r\n", cmd[2])
+	}
+
+	node := generateCircuitNode(&circuit)
+	if len(cmd) == 3 {
+		l, err := strconv.Atoi(cmd[2])
+		if err != nil {
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as mumber expected.\r\n", cmd[2])
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+
+}
+
+func processPrintCircuitsCmd(a *digitalstrom.Account, cmd []string) {
+	node := generateCircuitsNode(a)
+
+	if len(cmd) == 3 {
+		l, err := strconv.Atoi(cmd[2])
+		if err != nil {
+			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as mumber expected.\r\n", cmd[2])
+			return
+		}
+		printNode("", "", true, &node, l+1)
+		return
+	}
+	printNode("", "", true, &node, -1)
+}
+
 // ------------------------------ Node Generation -------------------------------------------
 
 func generateApartmentNode(app *digitalstrom.Apartment) node {
@@ -624,6 +687,16 @@ func generateGroupNode(group *digitalstrom.Group) node {
 	return n
 }
 
+func generateDevicesNode(a *digitalstrom.Account) node {
+	n := node{name: "Devices"}
+
+	for _, device := range a.Devices {
+		n.childs = append(n.childs, generateDeviceNode(&device))
+	}
+
+	return n
+}
+
 func generateDeviceNode(device *digitalstrom.Device) node {
 	n := node{name: "Device " + device.Name}
 
@@ -660,7 +733,7 @@ func generateSensorNode(sensor *digitalstrom.Sensor) node {
 	n := node{name: "Sensor " + strconv.Itoa(sensor.Index)}
 
 	n.elems = append(n.elems, "Index    "+strconv.Itoa(sensor.Index))
-	n.elems = append(n.elems, "Type     "+strconv.Itoa(sensor.Type))
+	n.elems = append(n.elems, "Type     "+strconv.Itoa(sensor.Type.GetID())+" ("+sensor.Type.GetName()+")")
 	n.elems = append(n.elems, "isValid  "+strconv.FormatBool(sensor.Valid))
 	n.elems = append(n.elems, "Value    "+strconv.FormatFloat(sensor.Value, 'f', 1, 64))
 
@@ -672,7 +745,7 @@ func generateBinaryInputNode(binInput *digitalstrom.BinaryInput) node {
 	n := node{name: "Binary Input " + strconv.Itoa(binInput.InputID)}
 
 	n.elems = append(n.elems, "InputID      "+strconv.Itoa(binInput.InputID))
-	n.elems = append(n.elems, "InputType    "+strconv.Itoa(binInput.InputType.GetID())+" "+binInput.InputType.GetName())
+	n.elems = append(n.elems, "InputType    "+strconv.Itoa(binInput.InputType.GetID())+" ("+binInput.InputType.GetName()+")")
 	n.elems = append(n.elems, "State        "+strconv.Itoa(binInput.State))
 	n.elems = append(n.elems, "TargetGroup  "+strconv.Itoa(binInput.TargetGroup))
 	return n
@@ -688,6 +761,32 @@ func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
 
 	return n
 
+}
+
+func generateCircuitsNode(a *digitalstrom.Account) node {
+	n := node{name: "Circuits"}
+
+	for _, circuit := range a.Circuits {
+		n.childs = append(n.childs, generateCircuitNode(&circuit))
+	}
+
+	return n
+}
+
+func generateCircuitNode(c *digitalstrom.Circuit) node {
+	n := node{name: "Circuit " + c.DSID}
+	fmt.Println(c)
+	n.elems = append(n.elems, "DSID         "+c.DSID)
+	n.elems = append(n.elems, "DSUID        "+c.DSUID)
+	n.elems = append(n.elems, "Display ID   "+c.DisplayID)
+	n.elems = append(n.elems, "Name         "+c.Name)
+	n.elems = append(n.elems, "HW Name      "+c.HwName)
+	n.elems = append(n.elems, "HW Version   "+c.HwVersionString)
+	n.elems = append(n.elems, "SW Version   "+c.SwVersion)
+	n.elems = append(n.elems, "Meter Value  "+strconv.Itoa(c.MeterValue)+" Ws")
+	n.elems = append(n.elems, "Consumption  "+strconv.Itoa(c.Consumption)+" W")
+
+	return n
 }
 
 // --------------------------- Printing ----------------------------------
@@ -739,7 +838,10 @@ func printHelp() {
 	fmt.Println("                 zones")
 	fmt.Println("            help [command]")
 	fmt.Println("           login")
-	fmt.Println("           print device <deviceID> [depth level]")
+	fmt.Println("           print circuit <circuitID> [depth level]")
+	fmt.Println("                 circuits [depth level]")
+	fmt.Println("                 device <deviceID> [depth level]")
+	fmt.Println("                 devices")
 	fmt.Println("                 floor <floorID> [depth level]")
 	fmt.Println("                 group <groupID> [depth level]")
 	fmt.Println("                 help")
@@ -759,7 +861,7 @@ func printHelp() {
 
 func printStructure(a *digitalstrom.Account, level int) {
 
-	node := generateApartmentNode(&a.Structure.Apart)
+	node := generateApartmentNode(&a.Structure.Apartment)
 	fmt.Println()
 	printNode("", "", true, &node, level)
 }
