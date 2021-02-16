@@ -60,22 +60,22 @@ type Connection struct {
 
 // Get Performs a GET request and returns the response body as string
 func (c *Connection) Get(url string) (*RequestResult, error) {
-	return c.doRequest(url, get, "", nil)
+	return c.Request(url, get, "", nil)
 }
 
 // Post Performs a Post Request with the given content and returns the response body as string
 func (c *Connection) Post(url string, body string) (*RequestResult, error) {
-	return c.doRequest(url, post, body, nil)
+	return c.Request(url, post, body, nil)
 }
 
 // Delete Performs a Delete Request and returns the response body as string
 func (c *Connection) Delete(url string) (*RequestResult, error) {
-	return c.doRequest(url, delete, "", nil)
+	return c.Request(url, delete, "", nil)
 }
 
 // Put Performs a Put Request with the given content and returns the response body as string
 func (c *Connection) Put(url string, body string) (*RequestResult, error) {
-	return c.doRequest(url, put, body, nil)
+	return c.Request(url, put, body, nil)
 }
 
 func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
@@ -106,7 +106,27 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 	return req, nil
 }
 
-// doRequest Performing an Http Request to the given url using the given method and (optionally) sends the body
+// Request is performing an Http-Request. In case it receives an HTTP-Error 403, an application Login will be performed and the
+// request will be repeated (only one time).
+func (c *Connection) Request(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
+	res, err := c.doRequest(url, method, body, params)
+	if err != nil {
+		if reqErr, ok := err.(*RequestError); ok {
+			if reqErr.StatusCode == 403 {
+				e := c.applicationLogin()
+				if e != nil {
+					return res, e
+				}
+				return c.doRequest(url, method, body, params)
+			}
+		}
+		return res, err
+	}
+	return res, nil
+}
+
+// doRequest is performing an http request. It is not recommended to use method "Connection.Request". In case the session token has been expired
+// doRequest is giving back the error and is not trying to login automatically
 func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
 
 	req, err := c.generateHTTPRequest(url, method, body, params)
