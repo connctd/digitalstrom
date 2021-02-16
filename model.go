@@ -7,6 +7,23 @@ import (
 	//"strings"
 )
 
+/*
+*               Structure ┐
+*                         └ Apartment ┐
+*                                     ├ Zones ┐
+*                                     |       ├ Devices ┐
+*                                     |       |         ├ Sensors
+*                                     |       |         ├ BinaryInputs
+*                                     |       |         ├ OutputChannels
+*                                     |       |         ├ GroupIds
+*                                     |       |         ├ ModeFeatures
+*                                     |       |         └ PairdDeviceIDs
+*                                     |       └ Groups ┐
+*                                     |                └ DeviceIDs
+*                                     └ Floors ┐
+*                                              └ ZoneIDs
+ */
+
 // Structure represents the digitalSTROM structure of
 // an installation.
 type Structure struct {

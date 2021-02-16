@@ -912,7 +912,7 @@ func printDeviceList(a *digitalstrom.Account) {
 		return
 	}
 	for id, dev := range a.Devices {
-		fmt.Println("   " + id + " " + dev.Name)
+		fmt.Printf("   %s  %s  %s\r\n", id, dev.ID, dev.Name)
 	}
 }
 
