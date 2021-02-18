@@ -2,6 +2,7 @@ package digitalstrom
 
 import (
 	"encoding/json"
+	"errors"
 	//"errors"
 	//"strconv"
 	//"strings"
@@ -171,6 +172,7 @@ type OutputChannel struct {
 	ChannelIndex int               `json:"channelIndex"`
 	ChannelName  string            `json:"channelName"`
 	Value        int
+	device       *Device
 }
 
 // Sensor ...
@@ -475,6 +477,15 @@ func (st SensorType) GetName() string {
 	default:
 		return "Unknown SensorType"
 	}
+}
+
+func (d *Device) GetOutputChannel(outputChannelType OutputChannelType) (*OutputChannel, error) {
+	for i := range d.OutputChannels {
+		if d.OutputChannels[i].ChannelType == outputChannelType {
+			return &d.OutputChannels[i], nil
+		}
+	}
+	return nil, errors.New("device '" + d.DisplayID + "' has no output channel of type '" + string(outputChannelType) + "'")
 }
 
 // GenerateApartment takes a json string and generates and returns an instance of structure Apartment

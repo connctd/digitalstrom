@@ -232,3 +232,18 @@ func (c *Connection) checkAccessToken() bool {
 	// ToDo do propper checks
 	return c.SessionToken != ""
 }
+
+func (s *Structure) assignCrossReferences() {
+	for i := range s.Apartment.Zones {
+		for j := range s.Apartment.Zones[i].Devices {
+			device := s.Apartment.Zones[i].Devices[j]
+			for n := range device.Sensors {
+				device.Sensors[n].Index = n
+				device.Sensors[n].device = &device
+			}
+			for n := range device.OutputChannels {
+				device.OutputChannels[n].device = &device
+			}
+		}
+	}
+}

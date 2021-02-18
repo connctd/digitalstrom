@@ -2,15 +2,15 @@ package main
 
 /*
 *
-								       _ _       _ _        _  _____ _______ _____   ____  __  __
-	    ***							  | (_)     (_) |      | |/ ____|__   __|  __ \ / __ \|  \/  |
- 	***   ****						__| |_  __ _ _| |_ __ _| | (___    | |  | |__) | |  | | \  / |
-   **       ** **        **	       / _` | |/ _` | | __/ _` | |\___ \   | |  |  _  /| |  | | |\/| |
-		    	****   ***	      | (_| | | (_| | | || (_| | |____) |  | |  | | \ \| |__| | |  | |
-		        	***	           \__,_|_|\__, |_|\__\__,_|_|_____/   |_|  |_|  \_\\____/|_|  |_|
-                    	                    __/ |
-					  					   |___/                                           CONSOLE
-
+*
+*          ***                              ___       _ __        _________________  ____  __  ___   ___ __
+*       ***   ****                    ____/ (_)___ _(_) /_____ _/ / ___/_  __/ __ \/ __ \/  |/  /  / (_) /_  _________ ________  __
+*      **       ** **        **      / __  / / __ `/ / __/ __ `/ /\__ \ / / / /_/ / / / / /|_/ /  / / / __ \/ ___/ __ `/ ___/ / / /
+*                  ****   ***       / /_/ / / /_/ / / /_/ /_/ / /___/ // / / _, _/ /_/ / /  / /  / / / /_/ / /  / /_/ / /  / /_/ /
+*                      ***	        \__,_/_/\__, /_/\__/\__,_/_//____//_/ /_/ |_|\____/_/  /_/  /_/_/_.___/_/   \__,_/_/   \__, /
+*                                          /____/                                                                         /____/
+*
+*
 *	Console file is not needed for using the library. It contains console utilities that allows a
 *   stand-alone usage of the library for the terminal. It could be seen as reference implementation
 *   for demonstrating the usage of that library.
@@ -23,8 +23,7 @@ package main
 *												├ Node Generation
 *												└ Printing
 *
-*
-*/
+ */
 
 import (
 	"bufio"
@@ -61,40 +60,31 @@ func main() {
 		cmd := strings.Split(readNextCommand(reader), " ")
 		switch cmd[0] {
 		case "":
-			break
 		case "request":
 			processRequestCommand(&account, cmd)
-			break
 		case "update":
 			processUpdateCommand(&account, cmd)
-			break
 		case "init":
 			processInitCommand(&account, cmd)
-			break
 		case "login":
 			processLoginCommand(&account, cmd)
-			break
 		case "list":
 			processListCommand(&account, cmd)
-			break
 		case "print":
 			processPrintCommand(&account, cmd)
-			break
 		case "register":
 			processRegisterCommand(&account, cmd)
-			break
 		case "help":
 			printHelp()
-			break
+		case "cmd":
+			processCmdCommand(&account, cmd)
 		case "set":
 			processSetCommand(&account, cmd)
-			break
 		case "exit":
 			printByeMsg()
 			os.Exit(0)
 		default:
 			fmt.Println("Unknown command '" + cmd[0] + "'.")
-			break
 		}
 	}
 }
@@ -111,20 +101,35 @@ func readNextCommand(r *bufio.Reader) string {
 
 // ---------------------------- Command Processing ----------------------------------
 func processProgramArguments(a *digitalstrom.Account, args []string) {
-	switch args[0] {
-	case "-at":
-		if len(args) != 2 {
-			fmt.Println("\r\nError. Application Token missing. To set Application Token, type '-st <application-token>.")
-			os.Exit(1)
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-at":
+			i++
+			if len(args) <= i {
+				fmt.Printf("\r\nError. Application Token missing. To set Application Token, type '-at <application-token>.\r\n\r\n")
+				os.Exit(1)
+			}
+			a.SetApplicationToken(args[i])
+		case "-url":
+			i++
+			if len(args) <= i {
+				fmt.Printf("\r\nError. URL addres is missing. To set base URL, type '-url <address>.\r\n\r\n")
+				os.Exit(1)
+			}
+			a.SetURL(args[i])
+		case "-r":
+			processRegisterCommand(a, args)
+			fmt.Println()
+			os.Exit(0)
+		case "--help", "-h":
+			printProgramArguments()
+			fmt.Println()
+			os.Exit(0)
+		default:
+			fmt.Printf("\r\nError. Unknown program argument '%s'.\r\nPlease type 'console -h' for a list of possible arguments.\r\n\r\n", args[i])
+			os.Exit(0)
 		}
-		a.SetApplicationToken(args[1])
-		break
-	case "-url":
-		break
-	case "-help":
-		printProgramArguments()
-		os.Exit(0)
-		break
 	}
 
 }
@@ -159,7 +164,7 @@ func processInitCommand(a *digitalstrom.Account, cmd []string) {
 
 func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 4 {
-		fmt.Println("Error. No valid register command. Type: register <username> <password> <application name>. No spaces allowed.")
+		fmt.Println("Error. No valid register command.")
 		return
 	}
 	atoken, err := a.Register(cmd[3], cmd[1], cmd[2])
@@ -168,40 +173,79 @@ func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Applicaiton with name '%s' registered.\r\n", cmd[3])
-	fmt.Printf("Your applicaiton token = %s", atoken)
+	fmt.Printf("Application with name '%s' registered at '%s'.\r\n", cmd[3], a.Connection.BaseURL)
+	fmt.Printf("Your applicaiton token = %s\r\n", atoken)
 }
 
 func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) < 2 {
 		fmt.Println("Error. You have to give a parameter what to get. Type 'help' for a full command list.")
+		return
 	}
 	switch cmd[1] {
 	case "consumption":
 		processUpdateConsumptionCmd(a, cmd)
-		break
 	case "meter":
 		processUpdateMeterValueCmd(a, cmd)
-		break
 	case "sensor":
 		processUpdateSensorCmd(a, cmd)
-		break
+	case "sensors":
+		processUpdateSensorsCmd(a, cmd)
 	case "on":
 		processUpdateOnCmd(a, cmd)
-		break
+	case "all":
+		updateAll(a)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
 }
 
+func updateAll(a *digitalstrom.Account) {
+	fmt.Println("Updating Sensor Values")
+	for i := range a.Devices {
+		for j := range a.Devices[i].Sensors {
+			sensor := a.Devices[i].Sensors[j]
+			fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, sensor.Index, sensor.Type.GetName())
+			value, err := a.UpdateSensorValue(&a.Devices[i].Sensors[j])
+			if err != nil {
+				fmt.Printf("ERROR. %s\r\n", err)
+			} else {
+				fmt.Printf("OK. value = %f\r\n", value)
+			}
+		}
+	}
+	fmt.Println()
+	fmt.Println("Updating Circuit Values")
+	for i := range a.Circuits {
+		fmt.Printf("   Updating consumption of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
+		value, err := a.UpdateCircuitConsumptionValue(a.Circuits[i].DisplayID)
+		if err != nil {
+			fmt.Printf("ERROR. %s\r\n", err)
+		} else {
+			fmt.Printf("OK. value = %d W\r\n", value)
+		}
+
+		fmt.Printf("   Updating meter value of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
+		value, err = a.UpdateCircuitMeterValue(a.Circuits[i].DisplayID)
+		if err != nil {
+			fmt.Printf("ERROR. %s", err)
+		} else {
+			fmt.Printf("OK. value = %d Ws", value)
+		}
+	}
+	fmt.Println()
+}
+
 func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 3 {
 		fmt.Println("Error. Bad update on command. use -> update on <deviceDisplayID>")
+		return
 	}
 
 	dev, ok := a.Devices[cmd[2]]
 	if !ok {
 		fmt.Printf("Error. Device with id '%s' not found.\r\n", cmd[2])
+		return
 	}
 
 	val, err := a.UpdateOnValue(&dev)
@@ -219,9 +263,34 @@ func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 
 }
 
+func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update sensor command. use -> update sensors <deviceDisplayID>")
+		return
+	}
+	device, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Printf("Error, device with display ID '%s' not found.\r\n", cmd[2])
+		return
+	}
+
+	for i := range device.Sensors {
+		fmt.Printf("Updating sensor %s.%d ...", cmd[2], i)
+		value, err := a.UpdateSensorValue(&device.Sensors[i])
+		if err != nil {
+			fmt.Printf("ERROR.Unable to update sensor '%d' of device '%s'.\r\n", i, cmd[2])
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("OK. Value = %f\r\n", value)
+	}
+	fmt.Println()
+}
+
 func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 4 {
 		fmt.Println("Error. Bad update sensor command. use -> update sensor <deviceDisplayID> <sensorIndex>")
+		return
 	}
 
 	index, err := strconv.Atoi(cmd[3])
@@ -237,7 +306,7 @@ func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	err = a.UpdateSensorValue(sensor)
+	_, err = a.UpdateSensorValue(sensor)
 	if err != nil {
 		fmt.Printf("Error. Unable to update sensor '%d' of device '%s'.\r\n", index, cmd[2])
 		fmt.Println(err)
@@ -251,6 +320,7 @@ func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 3 {
 		fmt.Println("Error. Bad get meter command. use -> get meter <circuitDisplayID>")
+		return
 	}
 	circuit, ok := a.Circuits[cmd[2]]
 	if !ok {
@@ -270,10 +340,12 @@ func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
 func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 3 {
 		fmt.Println("Error. Bad update consumption command. use -> update consumption <circuitDisplayID>")
+		return
 	}
 	circuit, ok := a.Circuits[cmd[2]]
 	if !ok {
 		fmt.Printf("Unable to find circuit with displayID '%s'\r\n", cmd[2])
+		return
 	}
 
 	value, err := a.UpdateCircuitConsumptionValue(circuit.DisplayID)
@@ -310,6 +382,7 @@ func processRequestCommand(a *digitalstrom.Account, cmd []string) {
 		if err != nil {
 			fmt.Println("Unable to request system info.")
 			fmt.Println(err)
+			return
 		}
 		fmt.Println()
 		fmt.Println("System Information:")
@@ -331,18 +404,55 @@ func processSetCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println("\r\rError. Not a valid set command. Type 'help' for complete command descriptions.")
 		return
 	}
-
 	switch cmd[1] {
-	case "on":
-		processSetOnCommand(a, cmd, true)
+	case "url":
+		if len(cmd) != 3 {
+			fmt.Println("\r\nError. Parameter <url> missing. Use -> set url <url>.")
+			return
+		}
+		a.SetURL(cmd[2])
+		fmt.Printf("OK. Base URL was set to '%s'.\r\n", cmd[2])
 		break
-	case "off":
-		processSetOnCommand(a, cmd, false)
+	case "at":
+		if len(cmd) != 3 {
+			fmt.Printf("\r\nError. Parameter <application token> missing. Use -> set at <application token>.\r\n")
+			return
+		}
+		a.SetApplicationToken(cmd[2])
+		fmt.Printf("OK. Application Token was set to '%s'.\r\n", cmd[2])
 		break
+	case "st":
+		if len(cmd) != 3 {
+			fmt.Printf("\r\nError. Parameter <session token> missing. Use -> set st <session token>.\r\n")
+			return
+		}
+		a.SetSessionToken(cmd[2])
+		fmt.Printf("OK. Session Token was set to '%s'.\r\n", cmd[2])
+		break
+	default:
+		fmt.Printf("\r\nError. Unknown set command '%s'.\r\n", cmd[1])
 	}
 }
 
-func processSetOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
+func processCmdCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) == 1 {
+		fmt.Println("\r\rError. Not a valid command. Type 'help' for complete command descriptions.")
+		return
+	}
+
+	switch cmd[1] {
+	case "on":
+		processOnCommand(a, cmd, true)
+	case "off":
+		processOnCommand(a, cmd, false)
+	case "channel":
+		processChannelCommand(a, cmd)
+	default:
+		fmt.Printf("\r\nError. '%s' is an unknown parameter for cmd.\r\n", cmd[1])
+	}
+}
+
+func processOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
 	if len(cmd) != 3 {
 		fmt.Println("\r\rError. Not a valid set on|off command. Use -> set on|off <deviceID>.")
 		return
@@ -350,6 +460,7 @@ func processSetOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
 	dev, ok := a.Devices[cmd[2]]
 	if !ok {
 		fmt.Printf("Error. Device with display ID '%s' not found.\r\n", cmd[1])
+		return
 	}
 	err := a.TurnOn(&dev, on)
 	if err != nil {
@@ -360,6 +471,30 @@ func processSetOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
 	fmt.Println("OK")
 }
 
+func processChannelCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 5 {
+		fmt.Println("Error. Not a correct command. Use -> cmd channel <deviceId> <channeType> <vaue>.")
+		return
+	}
+	device, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Printf("\r\nError. No device with id '%s' found.\r\n", cmd[2])
+		return
+	}
+	channel, err := device.GetOutputChannel(digitalstrom.OutputChannelType(cmd[3]))
+	if err != nil {
+		fmt.Printf("\r\nError. Unable to get channel '%s'.\r\n", cmd[3])
+		return
+	}
+	err = a.SetOutputChannelValue(channel, cmd[4])
+	if err != nil {
+		fmt.Printf("\r\nUnable to set value (%s) for channel '%s'.\r\n", cmd[4], cmd[3])
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("\r\nOK. Channel '%s' of device '%s' was set to '%s' sucessfuly.\r\n", cmd[3], cmd[2], cmd[4])
+}
+
 func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) == 1 {
 		fmt.Println("\r\rError. Not a valid print command. use -> print <what to print>. Type 'print help' for complete command description.")
@@ -368,36 +503,27 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	switch cmd[1] {
 	case "help":
 		printHelp()
-		break
 	case "structure":
 		processPrintStructureCmd(a, cmd)
-		break
 	case "device":
 		processPrintDeviceCmd(a, cmd)
-		break
 	case "devices":
 		processPrintDevicesCmd(a, cmd)
-		break
 	case "circuit":
 		processPrintCircuitCmd(a, cmd)
-		break
 	case "circuits":
 		processPrintCircuitsCmd(a, cmd)
-		break
-
 	case "floor":
 		processPrintFloorCmd(a, cmd)
-		break
 	case "zone":
 		processPrintZoneCmd(a, cmd)
-		break
 	case "group":
 		processPrintGroupCmd(a, cmd)
-		break
 	case "token":
 		fmt.Printf("  appication token = %s\r\n", a.Connection.ApplicationToken)
 		fmt.Printf("     session token = %s\r\n", a.Connection.SessionToken)
-		break
+	case "url":
+		fmt.Printf("          base url = %s\r\n", a.Connection.BaseURL)
 	default:
 		fmt.Printf(" Error. Unknown parameter '%s' for print command.\r\n", cmd[1])
 	}
@@ -411,19 +537,14 @@ func processListCommand(a *digitalstrom.Account, cmd []string) {
 	switch cmd[1] {
 	case "devices":
 		printDeviceList(a)
-		break
 	case "zones":
 		printZoneList(a)
-		break
 	case "floors":
 		printFloorList(a)
-		break
 	case "groups":
 		printGroupList(a)
-		break
 	case "circuits":
 		printCircuitList(a)
-		break
 	default:
 		fmt.Printf("Error, list '%s' is unknown.\r\n", cmd[1])
 	}
@@ -594,15 +715,17 @@ func processPrintDevicesCmd(a *digitalstrom.Account, cmd []string) {
 func processPrintCircuitCmd(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) <= 2 {
 		fmt.Println("Error. Bad print circuit command. Use -> print cuircuit <circuitID> [level of depth]")
+		return
 	}
 	circuit, ok := a.Circuits[cmd[2]]
 	if !ok {
 		fmt.Printf("\r\nError. Unable to find circuit with id '%s'.\r\n", cmd[2])
+		return
 	}
 
 	node := generateCircuitNode(&circuit)
-	if len(cmd) == 3 {
-		l, err := strconv.Atoi(cmd[2])
+	if len(cmd) == 4 {
+		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
 			fmt.Printf("\n\rError. '%s' is not a number. Level of depth as mumber expected.\r\n", cmd[2])
 			return
@@ -772,6 +895,7 @@ func generateOutputChannelNode(channel *digitalstrom.OutputChannel) node {
 	n.elems = append(n.elems, "ID    "+channel.ChannelID)
 	n.elems = append(n.elems, "Type  "+string(channel.ChannelType))
 	n.elems = append(n.elems, "Index "+strconv.Itoa(channel.ChannelIndex))
+	n.elems = append(n.elems, "Value "+strconv.Itoa(channel.Value))
 
 	return n
 
@@ -788,8 +912,8 @@ func generateCircuitsNode(a *digitalstrom.Account) node {
 }
 
 func generateCircuitNode(c *digitalstrom.Circuit) node {
-	n := node{name: "Circuit " + c.DSID}
-	fmt.Println(c)
+	n := node{name: "Circuit " + c.DisplayID}
+
 	n.elems = append(n.elems, "DSID         "+c.DSID)
 	n.elems = append(n.elems, "DSUID        "+c.DSUID)
 	n.elems = append(n.elems, "Display ID   "+c.DisplayID)
@@ -806,10 +930,16 @@ func generateCircuitNode(c *digitalstrom.Circuit) node {
 // --------------------------- Printing ----------------------------------
 
 func printProgramArguments() {
-	fmt.Println("Please make use of the following comamnd: console [-at] [-srv] [--help]")
+	fmt.Println("possible commands: console [-at <application token>]")
+	fmt.Println("                           [-url <url>]")
+	fmt.Println("                           [-r <username> <password> <application name>]")
+	fmt.Println("                           [-h]")
+	fmt.Println("                           [--help]")
 	fmt.Println()
 	fmt.Println("      -at     set the application token")
-	fmt.Println("      -srv    set the server address (including protocol and port)")
+	fmt.Println("      -ur     set the server address (including protocol and port)")
+	fmt.Println("      -r      registers a new application")
+	fmt.Println("      -h      prints this help screen")
 	fmt.Println("      --help  prints this help screen")
 	fmt.Println()
 }
@@ -825,6 +955,7 @@ func printWelcomeMsg() {
 	fmt.Println("               /____/                                                                         /____/   ")
 	fmt.Println("===================================================================================================================")
 	fmt.Println("                                                                           powered by IoT connctd - " + "\033[1;37m" + "www.connctd.com\033[0m")
+	fmt.Println()
 
 }
 
@@ -838,13 +969,11 @@ func printHelp() {
 	fmt.Println()
 	fmt.Println("   Commands you could use : ")
 	fmt.Println()
+	fmt.Println("             cmd on <deviceID>")
+	fmt.Println("                 off <deviceID>")
+	fmt.Println("                 channel <deviceID> <channelType> <value>")
 	fmt.Println("            exit")
 	fmt.Println("            init [applicationToken]")
-	fmt.Println("          update channel <deviceID> <channelType>")
-	fmt.Println("                 consumption <circuitID>")
-	fmt.Println("                 meter <circuitID>")
-	fmt.Println("                 on <deviceID>")
-	fmt.Println("                 sensor <deviceID> <sensorIndex>")
 	fmt.Println("            list circuits")
 	fmt.Println("                 devices")
 	fmt.Println("                 floors")
@@ -866,12 +995,16 @@ func printHelp() {
 	fmt.Println("         request circuits")
 	fmt.Println("                 structure")
 	fmt.Println("                 system")
-	fmt.Println("             set on <deviceID>")
-	fmt.Println("                 off <deviceID>")
-	fmt.Println("                 channel <deviceID> <channelType> <value>")
-	fmt.Println("                 channels <deviceID> <channelType> <value> [<channelType> <value>]")
-	fmt.Println("                 group <groupID> <value>")
-
+	fmt.Println("             set at <application token>")
+	fmt.Println("                 st <session token>")
+	fmt.Println("                 url <url>")
+	fmt.Println("          update all")
+	fmt.Println("                 channel <deviceID> <channelType>")
+	fmt.Println("                 consumption <circuitID>")
+	fmt.Println("                 meter <circuitID>")
+	fmt.Println("                 on <deviceID>")
+	fmt.Println("                 sensor <deviceID> <sensorIndex>")
+	fmt.Println("                 sensors <deviceID>")
 }
 
 func printStructure(a *digitalstrom.Account, level int) {
@@ -959,7 +1092,11 @@ func printNode(nl string, el string, lastChild bool, n *node, level int) {
 	} else {
 		fmt.Print(nl)
 		if level == 1 {
-			fmt.Println("└▇ " + "\033[1;37m" + n.name + "\033[0m")
+			if lastChild {
+				fmt.Println("└▇ " + "\033[1;37m" + n.name + "\033[0m")
+			} else {
+				fmt.Println("├▇ " + "\033[1;37m" + n.name + "\033[0m")
+			}
 			return
 		} else if lastChild {
 			fmt.Println("└▒ " + "\033[1;37m" + n.name + "\033[0m")

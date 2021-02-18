@@ -111,27 +111,45 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
+// SetOutputChannelValue sets the value for the given OutputChannel. Returns error
+func (a *Account) SetOutputChannelValue(channel *OutputChannel, value string) error {
+	params := make(map[string]string)
+	params["dsid"] = channel.device.ID
+	params["channelvalues"] = string(channel.ChannelType) + "=" + value
+
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/setOutputChannelValue", get, "", params)
+	if err != nil {
+		return err
+	}
+
+	if !res.OK {
+		return errors.New(res.Message)
+	}
+	return nil
+
+}
+
 // UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
 // the the sensor.
-func (a *Account) UpdateSensorValue(sensor *Sensor) error {
+func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
 	params := make(map[string]string)
 	params["dsid"] = sensor.device.ID
 	params["sensorIndex"] = strconv.Itoa(sensor.Index)
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !res.OK {
-		return errors.New(res.Message)
+		return 0, errors.New(res.Message)
 	}
 
 	value, ok := res.Result["sensorValue"].(float64)
 	if !ok {
-		return errors.New("unable to extract sensorValue from result")
+		return 0, errors.New("unable to extract sensorValue from request result")
 	}
 	sensor.Value = value
 
-	return nil
+	return value, nil
 }
 
 // UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
@@ -195,6 +213,8 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	json.Unmarshal(jsonString, &s)
 
 	a.Structure = s
+	s.assignCrossReferences() // needs to be called
+
 	// We have received the complete structure tree
 	// For fast access, the account has maps for devices, groups, etc..
 	// these maps need to be filled
@@ -294,10 +314,6 @@ func (a *Account) buildMaps() {
 		for j := range a.Structure.Apartment.Zones[i].Devices {
 			device := a.Structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
-			for n := range device.Sensors {
-				device.Sensors[n].Index = n
-				device.Sensors[n].device = &device
-			}
 		}
 	}
 	for i := range a.Structure.Apartment.Floors {
