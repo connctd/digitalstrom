@@ -17,11 +17,10 @@ package main
 *
 *	Structure of this file:			console.go  ┐
 *												├ main()
-*												├ Helper Functions that are not related to Command
-*												| Processing, Node Generation or Printing
-*												├ Command Processing
-*												├ Node Generation
-*												└ Printing
+*												├ Helper Functions   - are not related to user input processing
+*												├ Command Processing - functions that handle the user input
+*												├ Node Generation    - functions that generates nodes for tree views
+*												└ Printing           - functions,that print requested data to the screen
 *
  */
 
@@ -520,8 +519,8 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 	case "group":
 		processPrintGroupCmd(a, cmd)
 	case "token":
-		fmt.Printf("  appication token = %s\r\n", a.Connection.ApplicationToken)
-		fmt.Printf("     session token = %s\r\n", a.Connection.SessionToken)
+		fmt.Printf("  application token = %s\r\n", a.Connection.ApplicationToken)
+		fmt.Printf("      session token = %s\r\n", a.Connection.SessionToken)
 	case "url":
 		fmt.Printf("          base url = %s\r\n", a.Connection.BaseURL)
 	default:
