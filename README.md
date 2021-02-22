@@ -1,7 +1,7 @@
 # digitalSTROM
 
 digitalSTROM (dS) connects electrical devices via the existing power line and enables the implementation of control and regulation tasks. This library connects either to the local ds-Server API or to the cloud 
-one in order constro devices or receive sensor data. 
+one in order control devices or receive their sensor data. 
 
 # How to use
 

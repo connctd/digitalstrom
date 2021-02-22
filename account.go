@@ -185,11 +185,11 @@ func (a *Account) ApplicationLogin() error {
 	return a.Connection.applicationLogin()
 }
 
-// Register an application with the given applicitonName. Performs a request to generate an application token. A second request requires the
+// RegisterApplication an application with the given applicitonName. Performs a request to generate an application token. A second request requires the
 // Username and Password in order to generate a temporary session token. A third request enables the application token to login without
 // further user credentials (applicationLogin). Returns the application token or an error. The application token will not be assigned automatically.
 // Thus, in order to use the generated application token, it has to be set afterwards (Account.SetApplicationToken).
-func (a *Account) Register(applicationName string, username string, password string) (string, error) {
+func (a *Account) RegisterApplication(applicationName string, username string, password string) (string, error) {
 	return a.Connection.register(username, password, applicationName)
 }
 

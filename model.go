@@ -68,7 +68,9 @@ type Group struct {
 	Devices         []string        `json:"devices"`
 }
 
-// Circuit is the physical connection between the circuit breaker and digitalSTROM-Meter on one ende and each electic deice connected on this line on the other hand
+// Circuit is the physical connection between the circuit breaker
+// and digitalSTROM-Meter. For each circuit, the overall consumption
+// and meter vaues could be received.
 type Circuit struct {
 	Name                        string `json:"name"`
 	DSID                        string `json:"dsid"`
@@ -162,7 +164,7 @@ type BinaryInput struct {
 	TargetGroup int             `json:"targetGroup"`
 	InputType   BinaryInputType `json:"inputType"`
 	InputID     int             `json:"inputId"`
-	State       int             `json:"state"`
+	State       int             `json:"state"` // for generic: 1 = closed / 2 = open
 }
 
 // OutputChannel ....

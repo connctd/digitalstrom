@@ -166,7 +166,7 @@ func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Println("Error. No valid register command.")
 		return
 	}
-	atoken, err := a.Register(cmd[3], cmd[1], cmd[2])
+	atoken, err := a.RegisterApplication(cmd[3], cmd[1], cmd[2])
 	if err != nil {
 		fmt.Println("Error. Unable to register application.")
 		fmt.Println(err)
@@ -192,6 +192,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processUpdateSensorsCmd(a, cmd)
 	case "on":
 		processUpdateOnCmd(a, cmd)
+	case "device":
+		processUpdateDeviceCmd(a, cmd)
 	case "all":
 		updateAll(a)
 	default:
@@ -233,6 +235,31 @@ func updateAll(a *digitalstrom.Account) {
 		}
 	}
 	fmt.Println()
+}
+
+func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update device command. use -> update device <deviceDisplayID>")
+		return
+	}
+
+	dev, ok := a.Devices[cmd[2]]
+	if !ok {
+		fmt.Printf("Error. Device with id '%s' not found.\r\n", cmd[2])
+		return
+	}
+
+	for j := range dev.Sensors {
+		sensor := dev.Sensors[j]
+		fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", dev.DisplayID, sensor.Index, sensor.Type.GetName())
+		value, err := a.UpdateSensorValue(&dev.Sensors[j])
+		if err != nil {
+			fmt.Printf("ERROR. %s\r\n", err)
+		} else {
+			fmt.Printf("OK. value = %f\r\n", value)
+		}
+	}
+
 }
 
 func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
