@@ -10,4 +10,4 @@ then
   cd ..
 fi
 
-./$CONSOLE_FILE -at a49c2cdd96b62681bdf846b54f8fcc23cda575c59d81e6d63a6e5085347eb8a2
+./$CONSOLE_FILE -at <your application>
