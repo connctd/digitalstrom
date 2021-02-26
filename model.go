@@ -214,25 +214,25 @@ type SensorType int
 
 // Output Channel Types (OTC)
 const (
-	OCTbrightness               OutputChannelType = "brightness"
-	OCThue                      OutputChannelType = "hue"
-	OCTsaturation               OutputChannelType = "saturation"
-	OCTcolortemp                OutputChannelType = "colortemp"
-	OCTx                        OutputChannelType = "x"
-	OCTy                        OutputChannelType = "y"
-	OCTshadePositionOutside     OutputChannelType = "shadePositionOutside"
-	OCTshadePositionIndoor      OutputChannelType = "shadePositionIndoor"
-	OCTshadeOpeningAngleOutside OutputChannelType = "shadeOpeningAngleOutside"
-	OCTshadeOpeningAngleInside  OutputChannelType = "shadeOpeningAngleInside"
-	OCTtransparency             OutputChannelType = "transparency"
-	OCTairFlowIntensity         OutputChannelType = "airFlowIntensity"
-	OCTairFlowDirection         OutputChannelType = "airFlowDirection"
-	OCTairFlapPosition          OutputChannelType = "airFlapPosition"
-	OCTairLouverPosition        OutputChannelType = "airLouverPosition"
-	OCTheatingPower             OutputChannelType = "heatingPower"
-	OCTcoolingCapacity          OutputChannelType = "coolingCapacity"
-	OCTaudioVolume              OutputChannelType = "audioVolume"
-	OCTpowerState               OutputChannelType = "powerState"
+	OCTbrightness               = OutputChannelType("brightness")
+	OCThue                      = OutputChannelType("hue")
+	OCTsaturation               = OutputChannelType("saturation")
+	OCTcolortemp                = OutputChannelType("colortemp")
+	OCTx                        = OutputChannelType("x")
+	OCTy                        = OutputChannelType("y")
+	OCTshadePositionOutside     = OutputChannelType("shadePositionOutside")
+	OCTshadePositionIndoor      = OutputChannelType("shadePositionIndoor")
+	OCTshadeOpeningAngleOutside = OutputChannelType("shadeOpeningAngleOutside")
+	OCTshadeOpeningAngleInside  = OutputChannelType("shadeOpeningAngleInside")
+	OCTtransparency             = OutputChannelType("transparency")
+	OCTairFlowIntensity         = OutputChannelType("airFlowIntensity")
+	OCTairFlowDirection         = OutputChannelType("airFlowDirection")
+	OCTairFlapPosition          = OutputChannelType("airFlapPosition")
+	OCTairLouverPosition        = OutputChannelType("airLouverPosition")
+	OCTheatingPower             = OutputChannelType("heatingPower")
+	OCTcoolingCapacity          = OutputChannelType("coolingCapacity")
+	OCTaudioVolume              = OutputChannelType("audioVolume")
+	OCTpowerState               = OutputChannelType("powerState")
 )
 
 // Application Types
@@ -503,7 +503,6 @@ func GenerateApartment(j string) (*Apartment, error) {
 
 	return &apartement, nil
 }
-
 
 func (s *Structure) assignCrossReferences() {
 	for i := range s.Apartment.Zones {

@@ -3,7 +3,6 @@ package digitalstrom
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -30,19 +29,19 @@ type Account struct {
 	//Scenes     map[string]Scene
 
 	// updating
-	ticker      time.Ticker
 	quitTicker  chan bool
 	updateSetup updateSetup
 }
 
 type updateSetup struct {
-	defIntervalCircuits   int
-	defIntervalSensors    int
-	defIntervalChannels   int
-	maxSimultanousUpdates int
-	currentUpdates        int
-	intervals             map[string]int
-	lastUpdate            map[string]time.Time
+	defIntervalCircuits int
+	defIntervalSensors  int
+	defIntervalChannels int
+	maxParallelPolls    int
+	parallelPollCount   int
+	pollIntervalMap     map[string]int
+	lastPollMap         map[string]time.Time
+	activePollingMap    map[string]time.Time
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
@@ -60,12 +59,14 @@ func NewAccount() *Account {
 		Circuits:   make(map[string]Circuit),
 		quitTicker: make(chan bool),
 		updateSetup: updateSetup{
-			defIntervalCircuits:   DefaultCircuitUpdateInterval,
-			defIntervalChannels:   DefaultChannelUpdateInterval,
-			defIntervalSensors:    DefaultSensorUpdateInterval,
-			currentUpdates:        0,
-			maxSimultanousUpdates: DefaultMaxSimultanousUpdates,
-			intervals:             nil,
+			defIntervalCircuits: DefaultCircuitUpdateInterval,
+			defIntervalChannels: DefaultChannelUpdateInterval,
+			defIntervalSensors:  DefaultSensorUpdateInterval,
+			parallelPollCount:   0,
+			maxParallelPolls:    DefaultMaxSimultanousUpdates,
+			pollIntervalMap:     nil,
+			activePollingMap:    make(map[string]time.Time),
+			lastPollMap:         make(map[string]time.Time),
 		},
 	}
 
@@ -196,7 +197,7 @@ func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
 	}
 
 	value, ok := res.Result["sensorValue"].(float64)
-	fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
+	//fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
 	if !ok {
 		return 0, errors.New("unable to extract sensorValue from request result")
 	}
@@ -387,60 +388,90 @@ func (a *Account) buildMaps() {
 
 func (a *Account) prepareUpdates() {
 	// create a new map to temporarily store the last updates for each value
-	if a.updateSetup.intervals == nil {
-		a.generateDefaultUpdateIntervals()
+	if a.updateSetup.pollIntervalMap == nil {
+		a.SetDefaultUpdateIntervals()
 	}
-	a.updateSetup.lastUpdate = make(map[string]time.Time)
-	for key := range a.updateSetup.intervals {
-		a.updateSetup.lastUpdate[key] = time.Now()
+	a.updateSetup.lastPollMap = make(map[string]time.Time)
+	for key := range a.updateSetup.pollIntervalMap {
+		a.updateSetup.lastPollMap[key] = time.Now()
 	}
-	a.updateSetup.currentUpdates = 0
-}
-
-func (a *Account) generateDefaultUpdateIntervals() {
-	a.updateSetup.intervals = make(map[string]int)
-	for devID, dev := range a.Devices {
-		for i := range dev.Sensors {
-			id := "sensor." + devID + "." + strconv.Itoa(i)
-			a.updateSetup.intervals[id] = DefaultSensorUpdateInterval
-		}
-		for i := range dev.OutputChannels {
-			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
-			a.updateSetup.intervals[id] = DefaultChannelUpdateInterval
-		}
-	}
-	for circuitID := range a.Circuits {
-		a.updateSetup.intervals["circuit."+circuitID] = DefaultCircuitUpdateInterval
-	}
+	a.updateSetup.parallelPollCount = 0
 }
 
 // isUpdateIntervalReached checks whether the value with the given ID
 // needs to be updated.
 func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
-	t, ok := a.updateSetup.lastUpdate[id]
+	t, ok := a.updateSetup.lastPollMap[id]
 	if !ok {
 		return true
 	}
 	return time.Now().Sub(t).Seconds() > float64(interval)
 }
 
+// SetDefaultUpdateIntervals is setting for all sensors, channels and circuits
+// the corresponding default interval. Intervals that were set manually before, will be overwritten.
+func (a *Account) SetDefaultUpdateIntervals() {
+	a.updateSetup.pollIntervalMap = make(map[string]int)
+	for devID, dev := range a.Devices {
+		for i := range dev.Sensors {
+			id := "sensor." + devID + "." + strconv.Itoa(i)
+			a.updateSetup.pollIntervalMap[id] = DefaultSensorUpdateInterval
+		}
+		for i := range dev.OutputChannels {
+			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
+			a.updateSetup.pollIntervalMap[id] = DefaultChannelUpdateInterval
+		}
+	}
+	for circuitID := range a.Circuits {
+		a.updateSetup.pollIntervalMap["circuit."+circuitID] = DefaultCircuitUpdateInterval
+	}
+}
+
+// SetUpdateInterval sets the automatic update interval for the element identified
+// by given id. The id is a combination of eighter "sensor.<deviceID>.<sensor index>,
+// channel.<deviceID>.<ChannelType> or circuit.<circuitID>. When setting an update interval,
+// only those elements will be updated, that were added. To set default update intervals for
+// all elements, call SetDefaultUpdateIntervals()
+func (a *Account) SetUpdateInterval(id string, interval int) error {
+	if a.updateSetup.pollIntervalMap == nil {
+		a.updateSetup.pollIntervalMap = make(map[string]int)
+	}
+
+	s := strings.Split(id, ".")
+	if len(s) < 2 {
+		return errors.New(id + " is not a valid update element identifier")
+	}
+
+	// ToDo: do better id test (sensor existing, channel existing, circuit existing)
+
+	a.updateSetup.pollIntervalMap[id] = interval
+	return nil
+}
+
+// RunUpdates starts the update routine. It calls the internal prepareUpdates function.
+// When no update intervals are given in advance, a complete list of update intervals will
+// be generated automatically (including all sensors, output channesl and circuits) by using
+// the related default intervals.
 func (a *Account) RunUpdates() {
 	a.prepareUpdates()
-	a.ticker = *time.NewTicker(time.Second)
+	ticker := *time.NewTicker(time.Second)
 	go func() {
 		for {
 			select {
-			case <-a.ticker.C:
-				for id, interval := range a.updateSetup.intervals {
+			case <-ticker.C:
+				for id, interval := range a.updateSetup.pollIntervalMap {
 					if a.isUpdateIntervalReached(id, interval) {
-						if a.updateSetup.currentUpdates < a.updateSetup.maxSimultanousUpdates {
-							a.updateSetup.currentUpdates++
-							go a.performUpdate(id)
+						if a.updateSetup.parallelPollCount < a.updateSetup.maxParallelPolls {
+							_, ok := a.updateSetup.activePollingMap[id]
+							if !ok {
+								a.updateSetup.parallelPollCount++
+								go a.performUpdate(id)
+							}
 						}
 					}
 				}
 			case <-a.quitTicker:
-				a.ticker.Stop()
+				ticker.Stop()
 				return
 			}
 		}
@@ -448,16 +479,22 @@ func (a *Account) RunUpdates() {
 }
 
 func (a *Account) setUpdateTimeStamp(id string) {
-	a.updateSetup.currentUpdates--
-	a.updateSetup.lastUpdate[id] = time.Now()
+	a.updateSetup.parallelPollCount--
+	a.updateSetup.lastPollMap[id] = time.Now()
+	// remove id from polling list
+	delete(a.updateSetup.activePollingMap, id)
 }
 
 func (a *Account) performUpdate(id string) {
 
+	// independed from update result, set the current timestamp to reset the interval
 	defer a.setUpdateTimeStamp(id)
+	// remember that value with this id will be polled now
+	a.updateSetup.activePollingMap[id] = time.Now()
 
-	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.currentUpdates, a.updateSetup.maxSimultanousUpdates)
+	//	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.parallelPollCount, a.updateSetup.maxParallelPolls)
 
+	// ids are separated by '.'
 	s := strings.Split(id, ".")
 
 	if len(s) < 2 {
@@ -470,7 +507,7 @@ func (a *Account) performUpdate(id string) {
 			return
 		}
 		a.UpdateCircuitConsumptionValue(s[1])
-		a.UpdateCircuitConsumptionValue(s[1])
+		a.UpdateCircuitMeterValue(s[1])
 
 	case "sensor":
 		if len(s) != 3 {

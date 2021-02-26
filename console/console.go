@@ -459,7 +459,7 @@ func processSetCommand(a *digitalstrom.Account, cmd []string) {
 		}
 		a.SetURL(cmd[2])
 		fmt.Printf("OK. Base URL was set to '%s'.\r\n", cmd[2])
-		break
+
 	case "at":
 		if len(cmd) != 3 {
 			fmt.Printf("\r\nError. Parameter <application token> missing. Use -> set at <application token>.\r\n")
@@ -467,7 +467,7 @@ func processSetCommand(a *digitalstrom.Account, cmd []string) {
 		}
 		a.SetApplicationToken(cmd[2])
 		fmt.Printf("OK. Application Token was set to '%s'.\r\n", cmd[2])
-		break
+
 	case "st":
 		if len(cmd) != 3 {
 			fmt.Printf("\r\nError. Parameter <session token> missing. Use -> set st <session token>.\r\n")
@@ -475,14 +475,72 @@ func processSetCommand(a *digitalstrom.Account, cmd []string) {
 		}
 		a.SetSessionToken(cmd[2])
 		fmt.Printf("OK. Session Token was set to '%s'.\r\n", cmd[2])
-		break
+	case "pollinterval":
+		processSetUpdateIntervalCmd(a, cmd)
 	default:
 		fmt.Printf("\r\nError. Unknown set command '%s'.\r\n", cmd[1])
 	}
 }
 
+func processSetUpdateIntervalCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 4 {
+		fmt.Println("Error. Not a valid set updateinterval command. Type 'help' for a complete command description.")
+		return
+	}
+
+	id := ""
+	interval, err := strconv.Atoi(cmd[len(cmd)-1])
+	if err != nil {
+		fmt.Printf("'%s' is not a valid value for interval seconds.\r\n", cmd[len(cmd)-1])
+		return
+	}
+	switch cmd[2] {
+	case "sensor":
+		index, err := strconv.Atoi(cmd[4])
+		if err != nil {
+			fmt.Printf("'%s' is not a valid sensor index. Sensor index must be a number.\r\n", cmd[4])
+			return
+		}
+		_, err = a.GetSensor(cmd[3], index)
+		if err != nil {
+			fmt.Printf("Device '%s' has no sensor with index '%d'\r\n", cmd[3], index)
+			return
+		}
+		id = "sensor." + cmd[3] + "." + cmd[4]
+	case "channel":
+		dev, ok := a.Devices[cmd[3]]
+		if !ok {
+			fmt.Printf("Error. No device with id '%s' found.\r\n", cmd[3])
+			return
+		}
+		_, err := dev.GetOutputChannel(digitalstrom.OutputChannelType(cmd[4]))
+		if err != nil {
+			fmt.Printf("Device '%s' has no output channel of type %s", cmd[3], cmd[4])
+			return
+		}
+		id = "channel." + cmd[3] + "." + cmd[4]
+	case "circuit":
+		circuit, ok := a.Circuits[cmd[3]]
+		if !ok {
+			fmt.Printf("Error. No circuit with ID '%s' found.\r\n", cmd[3])
+			return
+		}
+		id = "circuit." + circuit.DisplayID
+	default:
+		fmt.Printf("Unknown element id for update interval command: '%s'\r\n", cmd[2])
+		return
+	}
+	err = a.SetUpdateInterval(id, interval)
+	if err != nil {
+		fmt.Printf("Error. Unable to set update interval for %s.\r\n", id)
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("OK. Update interval for %s was set to %d seconds.\r\n", id, interval)
+}
+
 func processCmdCommand(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) == 1 {
+	if len(cmd) != 1 {
 		fmt.Println("\r\rError. Not a valid command. Type 'help' for complete command descriptions.")
 		return
 	}
@@ -1050,9 +1108,9 @@ func printHelp() {
 	fmt.Println("                 default updateinterval sensor <interval in s>")
 	fmt.Println("                 default updateinterval channel <interval in s>")
 	fmt.Println("                 default updateinterval circuit <interval in s>")
-	fmt.Println("                 updateinterval sensor <deviceID> <sensorIndex> <interval in s>")
-	fmt.Println("                 updateinterval channel <deviceID> <channelType> <interval in s>")
-	fmt.Println("                 updateinterval circuit <deviceID> <channelType> <interval in s>")
+	fmt.Println("                 pollinterval sensor <deviceID> <sensorIndex> <interval in s>")
+	fmt.Println("                 pollinterval channel <deviceID> <channelType> <interval in s>")
+	fmt.Println("                 pollinterval circuit <circuitID> <interval in s>")
 	fmt.Println("          update all")
 	fmt.Println("                 auto <on|off>")
 	fmt.Println("                 channel <deviceID> <channelType>")

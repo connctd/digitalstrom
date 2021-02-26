@@ -43,10 +43,9 @@ type RequestResult struct {
 }
 
 const (
-	get    requestMethod = "GET"
-	put    requestMethod = "PUT"
-	post   requestMethod = "POST"
-	delete requestMethod = "DELETE"
+	get  requestMethod = "GET"
+	put  requestMethod = "PUT"
+	post requestMethod = "POST"
 )
 
 // Connection Holds access credentials and URL information for a specific account.
@@ -66,11 +65,6 @@ func (c *Connection) Get(url string) (*RequestResult, error) {
 // Post Performs a Post Request with the given content and returns the response body as string
 func (c *Connection) Post(url string, body string) (*RequestResult, error) {
 	return c.Request(url, post, body, nil)
-}
-
-// Delete Performs a Delete Request and returns the response body as string
-func (c *Connection) Delete(url string) (*RequestResult, error) {
-	return c.Request(url, delete, "", nil)
 }
 
 // Put Performs a Put Request with the given content and returns the response body as string
@@ -96,7 +90,6 @@ func (c *Connection) Request(url string, method requestMethod, body string, para
 	}
 	return res, nil
 }
-
 
 func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
