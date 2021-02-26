@@ -465,7 +465,9 @@ func (a *Account) RunUpdates() {
 				for id, interval := range a.updateSetup.pollIntervalMap {
 					if a.isUpdateIntervalReached(id, interval) {
 						if a.updateSetup.parallelPollCount < a.updateSetup.maxParallelPolls {
+							a.updateSetup.mapMutex.Lock()
 							_, ok := a.updateSetup.activePollingMap[id]
+							a.updateSetup.mapMutex.Unlock()
 							if !ok {
 								a.updateSetup.parallelPollCount++
 								go a.performUpdate(id)
@@ -483,10 +485,11 @@ func (a *Account) RunUpdates() {
 
 func (a *Account) setUpdateTimeStamp(id string) {
 	a.updateSetup.parallelPollCount--
+	a.updateSetup.mapMutex.Lock()
 	a.updateSetup.lastPollMap[id] = time.Now()
 	// remove id from polling list
 	// use mutex to prevent concurrent map writes
-	a.updateSetup.mapMutex.Lock()
+
 	delete(a.updateSetup.activePollingMap, id)
 	a.updateSetup.mapMutex.Unlock()
 }
