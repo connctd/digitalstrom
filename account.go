@@ -11,10 +11,10 @@ import (
 
 // Default update intervals
 const (
-	DefaultSensorUpdateInterval  = 30
-	DefaultCircuitUpdateInterval = 2
-	DefaultChannelUpdateInterval = 30
-	DefaultMaxSimultanousUpdates = 5
+	DefaultSensorPollingInterval  = 30
+	DefaultCircuitPollingInterval = 2
+	DefaultChannelPollingInterval = 30
+	DefaultMaxSimultanousPolls    = 5
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -30,20 +30,25 @@ type Account struct {
 	//Scenes     map[string]Scene
 
 	// updating
-	quitTicker  chan bool
-	updateSetup updateSetup
+	PollingSetup      PollingSetup
+	pollingHelpers    pollingHelpers
+	quitTickerChannel chan bool
 }
 
-type updateSetup struct {
-	defIntervalCircuits int
-	defIntervalSensors  int
-	defIntervalChannels int
-	maxParallelPolls    int
-	parallelPollCount   int
-	pollIntervalMap     map[string]int
-	lastPollMap         map[string]time.Time
-	activePollingMap    map[string]time.Time
-	mapMutex            *sync.Mutex
+// PollingSetup defines update settings for automated value polling
+type PollingSetup struct {
+	DefaultCircuitsPollingInterval int `json:"default_circuit_polling_interval"`
+	DefaultSensorsPollingInterval  int `json:"default_sensors_polling_interval"`
+	DefaultChannelsPollingInterval int `json:"default_channels_polling_interval"`
+	MaxParallelPolls               int `json:"max_parallel_polls"`
+}
+
+type pollingHelpers struct {
+	parallelPollCount int
+	pollIntervalMap   map[string]int
+	lastPollMap       map[string]time.Time
+	activePollingMap  map[string]time.Time
+	mapMutex          *sync.Mutex
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
@@ -52,24 +57,26 @@ func NewAccount() *Account {
 
 	return &Account{
 		Connection: Connection{
-			BaseURL: DEFAULT_BASE_URL,
+			BaseURL: DefautBaseURL,
 		},
-		Devices:    make(map[string]Device),
-		Groups:     make(map[int]Group),
-		Zones:      make(map[int]Zone),
-		Floors:     make(map[int]Floor),
-		Circuits:   make(map[string]Circuit),
-		quitTicker: make(chan bool),
-		updateSetup: updateSetup{
-			defIntervalCircuits: DefaultCircuitUpdateInterval,
-			defIntervalChannels: DefaultChannelUpdateInterval,
-			defIntervalSensors:  DefaultSensorUpdateInterval,
-			parallelPollCount:   0,
-			maxParallelPolls:    DefaultMaxSimultanousUpdates,
-			pollIntervalMap:     nil,
-			activePollingMap:    make(map[string]time.Time),
-			lastPollMap:         make(map[string]time.Time),
-			mapMutex:            &sync.Mutex{},
+		Devices:           make(map[string]Device),
+		Groups:            make(map[int]Group),
+		Zones:             make(map[int]Zone),
+		Floors:            make(map[int]Floor),
+		Circuits:          make(map[string]Circuit),
+		quitTickerChannel: make(chan bool),
+		PollingSetup: PollingSetup{
+			DefaultCircuitsPollingInterval: DefaultCircuitPollingInterval,
+			DefaultChannelsPollingInterval: DefaultChannelPollingInterval,
+			DefaultSensorsPollingInterval:  DefaultSensorPollingInterval,
+			MaxParallelPolls:               DefaultMaxSimultanousPolls,
+		},
+		pollingHelpers: pollingHelpers{
+			parallelPollCount: 0,
+			pollIntervalMap:   nil,
+			activePollingMap:  make(map[string]time.Time),
+			lastPollMap:       make(map[string]time.Time),
+			mapMutex:          &sync.Mutex{},
 		},
 	}
 
@@ -391,42 +398,46 @@ func (a *Account) buildMaps() {
 
 func (a *Account) prepareUpdates() {
 	// create a new map to temporarily store the last updates for each value
-	if a.updateSetup.pollIntervalMap == nil {
+	if a.pollingHelpers.pollIntervalMap == nil {
 		a.SetDefaultUpdateIntervals()
 	}
-	a.updateSetup.lastPollMap = make(map[string]time.Time)
-	for key := range a.updateSetup.pollIntervalMap {
-		a.updateSetup.lastPollMap[key] = time.Now()
+	a.pollingHelpers.lastPollMap = make(map[string]time.Time)
+	for key := range a.pollingHelpers.pollIntervalMap {
+		a.pollingHelpers.lastPollMap[key] = time.Now()
 	}
-	a.updateSetup.parallelPollCount = 0
+	a.pollingHelpers.parallelPollCount = 0
 }
 
 // isUpdateIntervalReached checks whether the value with the given ID
 // needs to be updated.
 func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
-	t, ok := a.updateSetup.lastPollMap[id]
+	t, ok := a.pollingHelpers.lastPollMap[id]
 	if !ok {
 		return true
 	}
 	return time.Now().Sub(t).Seconds() > float64(interval)
 }
 
+func (a *Account) ResetPollingIntervals() {
+	a.pollingHelpers.pollIntervalMap = make(map[string]int)
+}
+
 // SetDefaultUpdateIntervals is setting for all sensors, channels and circuits
 // the corresponding default interval. Intervals that were set manually before, will be overwritten.
 func (a *Account) SetDefaultUpdateIntervals() {
-	a.updateSetup.pollIntervalMap = make(map[string]int)
+	a.ResetPollingIntervals()
 	for devID, dev := range a.Devices {
 		for i := range dev.Sensors {
 			id := "sensor." + devID + "." + strconv.Itoa(i)
-			a.updateSetup.pollIntervalMap[id] = DefaultSensorUpdateInterval
+			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultSensorsPollingInterval
 		}
 		for i := range dev.OutputChannels {
 			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
-			a.updateSetup.pollIntervalMap[id] = DefaultChannelUpdateInterval
+			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultChannelsPollingInterval
 		}
 	}
 	for circuitID := range a.Circuits {
-		a.updateSetup.pollIntervalMap["circuit."+circuitID] = DefaultCircuitUpdateInterval
+		a.pollingHelpers.pollIntervalMap["circuit."+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
 	}
 }
 
@@ -436,8 +447,8 @@ func (a *Account) SetDefaultUpdateIntervals() {
 // only those elements will be updated, that were added. To set default update intervals for
 // all elements, call SetDefaultUpdateIntervals()
 func (a *Account) SetUpdateInterval(id string, interval int) error {
-	if a.updateSetup.pollIntervalMap == nil {
-		a.updateSetup.pollIntervalMap = make(map[string]int)
+	if a.pollingHelpers.pollIntervalMap == nil {
+		a.pollingHelpers.pollIntervalMap = make(map[string]int)
 	}
 
 	s := strings.Split(id, ".")
@@ -447,7 +458,7 @@ func (a *Account) SetUpdateInterval(id string, interval int) error {
 
 	// ToDo: do better id test (sensor existing, channel existing, circuit existing)
 
-	a.updateSetup.pollIntervalMap[id] = interval
+	a.pollingHelpers.pollIntervalMap[id] = interval
 	return nil
 }
 
@@ -462,20 +473,20 @@ func (a *Account) RunUpdates() {
 		for {
 			select {
 			case <-ticker.C:
-				for id, interval := range a.updateSetup.pollIntervalMap {
+				for id, interval := range a.pollingHelpers.pollIntervalMap {
 					if a.isUpdateIntervalReached(id, interval) {
-						if a.updateSetup.parallelPollCount < a.updateSetup.maxParallelPolls {
-							a.updateSetup.mapMutex.Lock()
-							_, ok := a.updateSetup.activePollingMap[id]
-							a.updateSetup.mapMutex.Unlock()
+						if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
+							a.pollingHelpers.mapMutex.Lock()
+							_, ok := a.pollingHelpers.activePollingMap[id]
+							a.pollingHelpers.mapMutex.Unlock()
 							if !ok {
-								a.updateSetup.parallelPollCount++
+								a.pollingHelpers.parallelPollCount++
 								go a.performUpdate(id)
 							}
 						}
 					}
 				}
-			case <-a.quitTicker:
+			case <-a.quitTickerChannel:
 				ticker.Stop()
 				return
 			}
@@ -484,14 +495,14 @@ func (a *Account) RunUpdates() {
 }
 
 func (a *Account) setUpdateTimeStamp(id string) {
-	a.updateSetup.parallelPollCount--
-	a.updateSetup.mapMutex.Lock()
-	a.updateSetup.lastPollMap[id] = time.Now()
+	a.pollingHelpers.parallelPollCount--
+	a.pollingHelpers.mapMutex.Lock()
+	a.pollingHelpers.lastPollMap[id] = time.Now()
 	// remove id from polling list
 	// use mutex to prevent concurrent map writes
 
-	delete(a.updateSetup.activePollingMap, id)
-	a.updateSetup.mapMutex.Unlock()
+	delete(a.pollingHelpers.activePollingMap, id)
+	a.pollingHelpers.mapMutex.Unlock()
 }
 
 func (a *Account) performUpdate(id string) {
@@ -499,9 +510,9 @@ func (a *Account) performUpdate(id string) {
 	// independed from update result, set the current timestamp to reset the interval
 	defer a.setUpdateTimeStamp(id)
 	// remember that value with this id will be polled now
-	a.updateSetup.mapMutex.Lock()
-	a.updateSetup.activePollingMap[id] = time.Now()
-	a.updateSetup.mapMutex.Unlock()
+	a.pollingHelpers.mapMutex.Lock()
+	a.pollingHelpers.activePollingMap[id] = time.Now()
+	a.pollingHelpers.mapMutex.Unlock()
 
 	//	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.parallelPollCount, a.updateSetup.maxParallelPolls)
 
@@ -548,5 +559,5 @@ func (a *Account) performUpdate(id string) {
 // StopUpdates stops the autonomous updater. Values will not requested until
 // updater will be started again
 func (a *Account) StopUpdates() {
-	a.quitTicker <- true
+	a.quitTickerChannel <- true
 }

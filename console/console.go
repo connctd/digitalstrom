@@ -79,6 +79,8 @@ func main() {
 			processCmdCommand(&account, cmd)
 		case "set":
 			processSetCommand(&account, cmd)
+		case "reset":
+			processResetCommand(&account, cmd)
 		case "exit":
 			printByeMsg()
 			os.Exit(0)
@@ -148,6 +150,20 @@ func processInitCommand(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 	fmt.Println("Success. Account is initiaised with complete structure.")
+}
+
+func processResetCommand(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) < 2 {
+		fmt.Println("Error. Not a valid reset command.")
+		return
+	}
+	switch cmd[1] {
+	case "pollingintervals":
+		a.ResetPollingIntervals()
+		fmt.Println("OK. All polling intervals are removed.")
+	default:
+		fmt.Printf("Unknown parameter for reset '%s'.\r\n", cmd[1])
+	}
 }
 
 func processLoginCommand(a *digitalstrom.Account, cmd []string) {
@@ -477,8 +493,62 @@ func processSetCommand(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("OK. Session Token was set to '%s'.\r\n", cmd[2])
 	case "pollinterval":
 		processSetUpdateIntervalCmd(a, cmd)
+	case "default":
+		processSetDefaultCmd(a, cmd)
+	case "max":
+		processSetMaxCommand(a, cmd)
 	default:
 		fmt.Printf("\r\nError. Unknown set command '%s'.\r\n", cmd[1])
+	}
+}
+
+func processSetMaxCommand(a *digitalstrom.Account, cmd []string) {
+	switch cmd[2] {
+	case "parallelpolls":
+		if len(cmd) < 4 {
+			fmt.Printf("\r\nError. Parameter <number of polls> missing. Use -> set max parallelpolls <number of polls>.\r\n")
+			return
+		}
+		number, err := strconv.Atoi(cmd[3])
+		if err != nil {
+			fmt.Printf("Error. '%s' is not a valid number of max polls\r\n", cmd[3])
+		}
+		a.PollingSetup.MaxParallelPolls = number
+		fmt.Printf("OK. Maximal amount of parallel polls was set to %d.\r\n", number)
+	}
+}
+
+func processSetDefaultCmd(a *digitalstrom.Account, cmd []string) {
+	switch cmd[2] {
+	case "pollingintervals":
+		a.SetDefaultUpdateIntervals()
+		fmt.Println("OK. All polling intervals are set to default.")
+	case "pollinterval":
+		if len(cmd) != 5 {
+			fmt.Println("Error. This is not a valid set command for setting default polling intervals.")
+		}
+		interval, err := strconv.Atoi(cmd[4])
+		if err != nil {
+			fmt.Printf("Error. '%s' is not a valid interval value. Must be a number!", cmd[4])
+			return
+		}
+		switch cmd[3] {
+		case "sensor":
+			a.PollingSetup.DefaultSensorsPollingInterval = interval
+		case "circuit":
+			a.PollingSetup.DefaultCircuitsPollingInterval = interval
+		case "channel":
+			a.PollingSetup.DefaultSensorsPollingInterval = interval
+		default:
+			fmt.Printf("Error. Unknown parameter '%s'. Should be 'sensor', 'circuit' or 'channel'.\r\n", cmd[3])
+			return
+		}
+		fmt.Printf("OK. New default polling interval for all %ss are set to %d seconds.\r\n", cmd[3], interval)
+		fmt.Println("This will only take effect, when polling intervals will be set automatically.")
+		fmt.Println("If you want to reset all polling intervals in order to use the default ones")
+		fmt.Println("type 'reset pollingintervals' followed by 'set default pollingintervals'.")
+	default:
+		fmt.Printf("Error. Unkown parameter for setting default '%s'\r\n", cmd[2])
 	}
 }
 
@@ -1084,7 +1154,7 @@ func printHelp() {
 	fmt.Println("                 floors")
 	fmt.Println("                 groups")
 	fmt.Println("                 zones")
-	fmt.Println("            help [command]")
+	fmt.Println("            help")
 	fmt.Println("           login")
 	fmt.Println("           print circuit <circuitID> [depth level]")
 	fmt.Println("                 circuits [depth level]")
@@ -1100,14 +1170,18 @@ func printHelp() {
 	fmt.Println("         request circuits")
 	fmt.Println("                 structure")
 	fmt.Println("                 system")
+	fmt.Println("           reset pollingintervals")
 	fmt.Println("            save updateconfig <filename>")
 	fmt.Println("                 account <filename>")
 	fmt.Println("             set at <application token>")
-	fmt.Println("                 st <session token>")
-	fmt.Println("                 url <url>")
+	fmt.Println("                 default pollingintervals")
+	fmt.Println("                 default pollinterval <'sensor'|'circuit'|'channel'> <interval in s>")
+	fmt.Println("                 max parallelpolls <number of polls>")
 	fmt.Println("                 pollinterval sensor <deviceID> <sensorIndex> <interval in s>")
 	fmt.Println("                 pollinterval channel <deviceID> <channelType> <interval in s>")
 	fmt.Println("                 pollinterval circuit <circuitID> <interval in s>")
+	fmt.Println("                 st <session token>")
+	fmt.Println("                 url <url>")
 	fmt.Println("          update all")
 	fmt.Println("                 auto <on|off>")
 	fmt.Println("                 channel <deviceID> <channelType>")

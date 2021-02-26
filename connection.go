@@ -13,8 +13,8 @@ import (
 type requestMethod string
 
 const (
-	// DEFAULT_BASE_URL Will be set as default Base Url for connection
-	DEFAULT_BASE_URL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
+	// DefautBaseURL Will be set as default Base Url for connections
+	DefautBaseURL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
 )
 
 // RequestError structure to give a proper error that could occur during
