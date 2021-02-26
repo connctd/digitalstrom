@@ -5,12 +5,13 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Default update intervals
 const (
-	DefaultSensorUpdateInterval  = 60
+	DefaultSensorUpdateInterval  = 30
 	DefaultCircuitUpdateInterval = 2
 	DefaultChannelUpdateInterval = 30
 	DefaultMaxSimultanousUpdates = 5
@@ -42,6 +43,7 @@ type updateSetup struct {
 	pollIntervalMap     map[string]int
 	lastPollMap         map[string]time.Time
 	activePollingMap    map[string]time.Time
+	mapMutex            *sync.Mutex
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
@@ -67,6 +69,7 @@ func NewAccount() *Account {
 			pollIntervalMap:     nil,
 			activePollingMap:    make(map[string]time.Time),
 			lastPollMap:         make(map[string]time.Time),
+			mapMutex:            &sync.Mutex{},
 		},
 	}
 
@@ -482,7 +485,10 @@ func (a *Account) setUpdateTimeStamp(id string) {
 	a.updateSetup.parallelPollCount--
 	a.updateSetup.lastPollMap[id] = time.Now()
 	// remove id from polling list
+	// use mutex to prevent concurrent map writes
+	a.updateSetup.mapMutex.Lock()
 	delete(a.updateSetup.activePollingMap, id)
+	a.updateSetup.mapMutex.Unlock()
 }
 
 func (a *Account) performUpdate(id string) {
@@ -490,7 +496,9 @@ func (a *Account) performUpdate(id string) {
 	// independed from update result, set the current timestamp to reset the interval
 	defer a.setUpdateTimeStamp(id)
 	// remember that value with this id will be polled now
+	a.updateSetup.mapMutex.Lock()
 	a.updateSetup.activePollingMap[id] = time.Now()
+	a.updateSetup.mapMutex.Unlock()
 
 	//	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.parallelPollCount, a.updateSetup.maxParallelPolls)
 
