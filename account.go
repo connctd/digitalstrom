@@ -3,35 +3,65 @@ package digitalstrom
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
+	"time"
+)
+
+// Default update intervals
+const (
+	DefaultSensorUpdateInterval  = 120
+	DefaultCircuitUpdateInterval = 3
+	DefaultChannelUpdateInterval = 30
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
 // faster communication
 type Account struct {
 	Connection Connection
-	Structure  Structure
+	structure  Structure
 	Devices    map[string]Device
 	Groups     map[int]Group
 	Zones      map[int]Zone
 	Floors     map[int]Floor
 	Circuits   map[string]Circuit
 	//Scenes     map[string]Scene
+
+	// updating
+	ticker      time.Ticker
+	quitTicker  chan bool
+	updateSetup updateSetup
+}
+
+type updateSetup struct {
+	maxSimultanousUpdates int
+	currentUpdates        int
+	intervals             map[string]int
+	lastUpdate            map[string]time.Time
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
 // empty Account instance
 func NewAccount() *Account {
+
 	return &Account{
 		Connection: Connection{
 			BaseURL: DEFAULT_BASE_URL,
 		},
-		Devices:  make(map[string]Device),
-		Groups:   make(map[int]Group),
-		Zones:    make(map[int]Zone),
-		Floors:   make(map[int]Floor),
-		Circuits: make(map[string]Circuit),
+		Devices:    make(map[string]Device),
+		Groups:     make(map[int]Group),
+		Zones:      make(map[int]Zone),
+		Floors:     make(map[int]Floor),
+		Circuits:   make(map[string]Circuit),
+		quitTicker: make(chan bool),
 	}
+
+}
+
+// GetStructure returns the structure of the account.
+func (a *Account) GetStructure() *Structure {
+	return &a.structure
 }
 
 // SetSessionToken for manually setting the token. Be aware of a timout for each session token. It is recommended to perform
@@ -64,7 +94,8 @@ func (a *Account) Init() error {
 	if err != nil {
 		return err
 	}
-	return err
+
+	return nil
 }
 
 // UpdateOnValue ...
@@ -93,9 +124,18 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 	if !ok {
 		return -1, errors.New("unexpected response - no field 'meterValue' found in response")
 	}
-	circuit.MeterValue = int(value)
-	a.Circuits[circuitID] = circuit
-	return int(value), nil
+
+	newValue := int(value)
+
+	if newValue != circuit.MeterValue {
+		//	oldValue := circuit.MeterValue
+		circuit.MeterValue = newValue
+		a.Circuits[circuitID] = circuit
+		//	dispatchValueChange(channel, conumption, oldvalue, newvalue)
+		//a.OnCircuitMeterValueUpdate <- CircuitMeterValueUpdateEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
+	}
+
+	return newValue, nil
 }
 
 //GetSensor Returning the sensor with die index ID <sensorIndex> of device with display ID <deviceID> or nil when either
@@ -144,6 +184,7 @@ func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
 	}
 
 	value, ok := res.Result["sensorValue"].(float64)
+	fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
 	if !ok {
 		return 0, errors.New("unable to extract sensorValue from request result")
 	}
@@ -156,6 +197,7 @@ func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
 // The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
 // return or an error (when ocurred)
 func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
+
 	circuit, ok := a.Circuits[circuitID]
 	if !ok {
 		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
@@ -173,10 +215,15 @@ func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 		return -1, errors.New("unexpected response - no field consumption found in response")
 	}
 
-	circuit.Consumption = int(value)
-	a.Circuits[circuitID] = circuit
+	newValue := int(value)
 
-	return int(value), nil
+	if newValue != circuit.Consumption {
+		//oldValue := circuit.Consumption
+		circuit.Consumption = newValue
+		a.Circuits[circuitID] = circuit
+
+	}
+	return newValue, nil
 }
 
 // ApplicationLogin uses the assigned applicationToken to generate a session token. The timeout depends on server settings,
@@ -212,13 +259,9 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	s := Structure{}
 	json.Unmarshal(jsonString, &s)
 
-	a.Structure = s
-	s.assignCrossReferences() // needs to be called
+	// assign the structure to our account
+	a.setStructure(s)
 
-	// We have received the complete structure tree
-	// For fast access, the account has maps for devices, groups, etc..
-	// these maps need to be filled
-	a.buildMaps()
 	// return the shit
 	return &s, nil
 }
@@ -300,24 +343,153 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 	return nil
 }
 
+// SetStructure assigns a structure to the account, maps will be build and cross references assigned.
+// It is highy recommended to use this function in order to assign a structure rather than assign them directly.
+func (a *Account) setStructure(structure Structure) {
+	a.structure = structure
+	a.structure.assignCrossReferences()
+	a.buildMaps()
+}
+
 // buldMaps is generating maps for devices, circuits, zones, groups
 // and floors for fast access. It should be called whenever a structure,
 // circuit or groups are requested
 func (a *Account) buildMaps() {
-	for i := range a.Structure.Apartment.Zones {
-		zone := a.Structure.Apartment.Zones[i]
+	for i := range a.structure.Apartment.Zones {
+		zone := a.structure.Apartment.Zones[i]
 		a.Zones[zone.ID] = zone
-		for j := range a.Structure.Apartment.Zones[i].Groups {
-			group := a.Structure.Apartment.Zones[i].Groups[j]
+		for j := range a.structure.Apartment.Zones[i].Groups {
+			group := a.structure.Apartment.Zones[i].Groups[j]
 			a.Groups[group.ID] = group
 		}
-		for j := range a.Structure.Apartment.Zones[i].Devices {
-			device := a.Structure.Apartment.Zones[i].Devices[j]
+		for j := range a.structure.Apartment.Zones[i].Devices {
+			device := a.structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
 		}
 	}
-	for i := range a.Structure.Apartment.Floors {
-		floor := a.Structure.Apartment.Floors[i]
+	for i := range a.structure.Apartment.Floors {
+		floor := a.structure.Apartment.Floors[i]
 		a.Floors[floor.ID] = floor
 	}
+}
+
+func (a *Account) RegisterEventChannel(channel chan ValueChangeEvent) {
+	// register listener for consumption change events
+
+}
+
+func (a *Account) prepareUpdates() {
+	// create a new map to temporarily store the last updates for each value
+	if a.updateSetup.intervals == nil {
+		a.generateDefaultUpdateSetups()
+	}
+	a.updateSetup.lastUpdate = make(map[string]time.Time)
+	for key := range a.updateSetup.intervals {
+		a.updateSetup.lastUpdate[key] = time.Now()
+	}
+	a.updateSetup.currentUpdates = 0
+	a.updateSetup.maxSimultanousUpdates = 5
+}
+
+func (a *Account) generateDefaultUpdateSetups() {
+	a.updateSetup.intervals = make(map[string]int)
+	for devID, dev := range a.Devices {
+		for i := range dev.Sensors {
+			id := "sensor." + devID + "." + strconv.Itoa(i)
+			a.updateSetup.intervals[id] = DefaultSensorUpdateInterval
+		}
+		for i := range dev.OutputChannels {
+			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
+			a.updateSetup.intervals[id] = DefaultChannelUpdateInterval
+		}
+	}
+	for circuitID := range a.Circuits {
+		a.updateSetup.intervals["circuit."+circuitID] = DefaultCircuitUpdateInterval
+	}
+}
+
+// isUpdateIntervalReached checks whether the value with the given ID
+// needs to be updated.
+func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
+	t, ok := a.updateSetup.lastUpdate[id]
+	if !ok {
+		return true
+	}
+	return time.Now().Sub(t).Seconds() > float64(interval)
+}
+
+func (a *Account) RunUpdates() {
+	a.prepareUpdates()
+	a.ticker = *time.NewTicker(time.Second)
+	go func() {
+		for {
+			select {
+			case <-a.ticker.C:
+				for id, interval := range a.updateSetup.intervals {
+					if a.isUpdateIntervalReached(id, interval) {
+						if a.updateSetup.currentUpdates < a.updateSetup.maxSimultanousUpdates {
+							a.updateSetup.currentUpdates++
+							go a.performUpdate(id)
+						}
+					}
+				}
+			case <-a.quitTicker:
+				a.ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+func (a *Account) decreaseUpdateCounter() {
+	a.updateSetup.currentUpdates--
+}
+
+func (a *Account) performUpdate(id string) {
+
+	defer a.decreaseUpdateCounter()
+
+	fmt.Printf("\r\n%s (%d)", id, a.updateSetup.currentUpdates)
+
+	s := strings.Split(id, ".")
+
+	if len(s) < 2 {
+		return
+	}
+
+	switch s[0] {
+	case "circuit":
+		if len(s) != 2 {
+			return
+		}
+		a.UpdateCircuitConsumptionValue(s[1])
+		a.UpdateCircuitConsumptionValue(s[1])
+		a.updateSetup.lastUpdate[id] = time.Now()
+	case "sensor":
+		if len(s) != 3 {
+			return
+		}
+		number, err := strconv.Atoi(s[2])
+		if err != nil {
+			return
+		}
+		sensor, err := a.GetSensor(s[1], number)
+		if err != nil {
+			return
+		}
+		a.UpdateSensorValue(sensor)
+		a.updateSetup.lastUpdate[id] = time.Now()
+	case "channel":
+		// not implemented yet
+		a.updateSetup.lastUpdate[id] = time.Now()
+		return
+	default:
+		// place error logging for invalid id over here
+		a.updateSetup.lastUpdate[id] = time.Now()
+	}
+
+}
+
+func (a *Account) StopUpdates() {
+	a.quitTicker <- true
 }

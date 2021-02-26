@@ -133,17 +133,6 @@ func processProgramArguments(a *digitalstrom.Account, args []string) {
 
 }
 
-func processLoginCommand(a *digitalstrom.Account, cmd []string) {
-	err := a.ApplicationLogin()
-	if err != nil {
-		fmt.Println("Error. Application Login not successful.")
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("Login successful - new session token = %s\r\n", a.Connection.SessionToken)
-}
-
 func processInitCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) > 2 {
 		fmt.Println("Too many arguments for init command. init [applicationToken] expected.")
@@ -159,6 +148,17 @@ func processInitCommand(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 	fmt.Println("Success. Account is initiaised with complete structure.")
+}
+
+func processLoginCommand(a *digitalstrom.Account, cmd []string) {
+	err := a.ApplicationLogin()
+	if err != nil {
+		fmt.Println("Error. Application Login not successful.")
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("Login successful - new session token = %s\r\n", a.Connection.SessionToken)
 }
 
 func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
@@ -196,6 +196,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processUpdateDeviceCmd(a, cmd)
 	case "all":
 		updateAll(a)
+	case "auto":
+		processAutoUpdateCmd(a, cmd)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -205,6 +207,7 @@ func updateAll(a *digitalstrom.Account) {
 	fmt.Println("Updating Sensor Values")
 	for i := range a.Devices {
 		for j := range a.Devices[i].Sensors {
+
 			sensor := a.Devices[i].Sensors[j]
 			fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, sensor.Index, sensor.Type.GetName())
 			value, err := a.UpdateSensorValue(&a.Devices[i].Sensors[j])
@@ -213,6 +216,7 @@ func updateAll(a *digitalstrom.Account) {
 			} else {
 				fmt.Printf("OK. value = %f\r\n", value)
 			}
+
 		}
 	}
 	fmt.Println()
@@ -235,6 +239,23 @@ func updateAll(a *digitalstrom.Account) {
 		}
 	}
 	fmt.Println()
+}
+
+func processAutoUpdateCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update auto command. use -> update auto <on|off>")
+		return
+	}
+	switch cmd[2] {
+	case "on":
+		a.RunUpdates()
+		fmt.Println("OK. Updates will be made autonomously.")
+	case "off":
+		a.StopUpdates()
+		fmt.Println("OK. Automatic updates are stopped.")
+	default:
+		fmt.Printf("Error. %s is not a valid parameter. Type either 'on' or 'off'.", cmd[2])
+	}
 }
 
 func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
@@ -1021,21 +1042,38 @@ func printHelp() {
 	fmt.Println("         request circuits")
 	fmt.Println("                 structure")
 	fmt.Println("                 system")
+	fmt.Println("            save updateconfig <filename>")
+	fmt.Println("                 account <filename>")
 	fmt.Println("             set at <application token>")
 	fmt.Println("                 st <session token>")
 	fmt.Println("                 url <url>")
+	fmt.Println("                 default updateinterval sensor <interval in s>")
+	fmt.Println("                 default updateinterval channel <interval in s>")
+	fmt.Println("                 default updateinterval circuit <interval in s>")
+	fmt.Println("                 updateinterval sensor <deviceID> <sensorIndex> <interval in s>")
+	fmt.Println("                 updateinterval channel <deviceID> <channelType> <interval in s>")
+	fmt.Println("                 updateinterval circuit <deviceID> <channelType> <interval in s>")
 	fmt.Println("          update all")
+	fmt.Println("                 auto <on|off>")
 	fmt.Println("                 channel <deviceID> <channelType>")
 	fmt.Println("                 consumption <circuitID>")
 	fmt.Println("                 meter <circuitID>")
 	fmt.Println("                 on <deviceID>")
 	fmt.Println("                 sensor <deviceID> <sensorIndex>")
 	fmt.Println("                 sensors <deviceID>")
+
 }
 
 func printStructure(a *digitalstrom.Account, level int) {
 
-	node := generateApartmentNode(&a.Structure.Apartment)
+	structure := a.GetStructure()
+
+	if structure == nil {
+		fmt.Println("No Structure available yet. Please request the structure (type 'request structure') or init the account (type 'init').")
+		return
+	}
+
+	node := generateApartmentNode(&structure.Apartment)
 	fmt.Println()
 	printNode("", "", true, &node, level)
 }

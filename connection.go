@@ -49,7 +49,8 @@ const (
 	delete requestMethod = "DELETE"
 )
 
-// Connection Holds access credentials and URL information for a specific account. Contains routines for GET, PUSH, PUT and DELETE
+// Connection Holds access credentials and URL information for a specific account.
+// Contains routines for GET, PUSH, PUT and DELETE
 type Connection struct {
 	SessionToken     string
 	ApplicationToken string
@@ -77,6 +78,26 @@ func (c *Connection) Put(url string, body string) (*RequestResult, error) {
 	return c.Request(url, put, body, nil)
 }
 
+// Request is performing an Http-Request. In case it receives an HTTP-Error 403, an application Login will be performed and the
+// request will be repeated (only one time).
+func (c *Connection) Request(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
+	res, err := c.doRequest(url, method, body, params)
+	if err != nil {
+		if reqErr, ok := err.(*RequestError); ok {
+			if reqErr.StatusCode == 403 {
+				e := c.applicationLogin()
+				if e != nil {
+					return res, e
+				}
+				return c.doRequest(url, method, body, params)
+			}
+		}
+		return res, err
+	}
+	return res, nil
+}
+
+
 func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
 	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
@@ -103,25 +124,6 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 	}
 	req.URL.RawQuery = q.Encode()
 	return req, nil
-}
-
-// Request is performing an Http-Request. In case it receives an HTTP-Error 403, an application Login will be performed and the
-// request will be repeated (only one time).
-func (c *Connection) Request(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
-	res, err := c.doRequest(url, method, body, params)
-	if err != nil {
-		if reqErr, ok := err.(*RequestError); ok {
-			if reqErr.StatusCode == 403 {
-				e := c.applicationLogin()
-				if e != nil {
-					return res, e
-				}
-				return c.doRequest(url, method, body, params)
-			}
-		}
-		return res, err
-	}
-	return res, nil
 }
 
 // doRequest is performing an http request. It is not recommended to use method "Connection.Request". In case the session token has been expired
@@ -231,19 +233,4 @@ func (c *Connection) checkApplicationToken() bool {
 func (c *Connection) checkAccessToken() bool {
 	// ToDo do propper checks
 	return c.SessionToken != ""
-}
-
-func (s *Structure) assignCrossReferences() {
-	for i := range s.Apartment.Zones {
-		for j := range s.Apartment.Zones[i].Devices {
-			device := s.Apartment.Zones[i].Devices[j]
-			for n := range device.Sensors {
-				device.Sensors[n].Index = n
-				device.Sensors[n].device = &device
-			}
-			for n := range device.OutputChannels {
-				device.OutputChannels[n].device = &device
-			}
-		}
-	}
 }
