@@ -14,7 +14,7 @@ const (
 	defaultSensorPollingInterval  = 30
 	defaultCircuitPollingInterval = 5
 	defaultChannelPollingInterval = 30
-	defaultMaxSimultanousPolls    = 5
+	defaultMaxSimultanousPolls    = 10
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -219,7 +219,7 @@ func (a *Account) RequestSystemInfo() (*System, error) {
 // polling intervals for sensors, circuits and output channels will
 // be set to default.
 func (a *Account) ResetPollingIntervals() {
-	a.StopUpdates()
+	//a.StopUpdates() only stop when update routine is running
 	a.pollingHelpers.pollIntervalMap = make(map[string]int)
 }
 
@@ -526,7 +526,7 @@ func (a *Account) performUpdate(id string) {
 	a.pollingHelpers.activePollingMap[id] = time.Now()
 	a.pollingHelpers.mapMutex.Unlock()
 
-	//	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.parallelPollCount, a.updateSetup.maxParallelPolls)
+	//fmt.Printf("\r\nupdating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls)
 
 	// ids are separated by '.'
 	s := strings.Split(id, ".")

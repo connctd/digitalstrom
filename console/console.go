@@ -1171,8 +1171,6 @@ func printHelp() {
 	fmt.Println("                 structure")
 	fmt.Println("                 system")
 	fmt.Println("           reset pollingintervals")
-	fmt.Println("            save updateconfig <filename>")
-	fmt.Println("                 account <filename>")
 	fmt.Println("             set at <application token>")
 	fmt.Println("                 default pollingintervals")
 	fmt.Println("                 default pollinterval <'sensor'|'circuit'|'channel'> <interval in s>")
