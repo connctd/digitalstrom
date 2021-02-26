@@ -11,9 +11,10 @@ import (
 
 // Default update intervals
 const (
-	DefaultSensorUpdateInterval  = 120
-	DefaultCircuitUpdateInterval = 3
+	DefaultSensorUpdateInterval  = 60
+	DefaultCircuitUpdateInterval = 2
 	DefaultChannelUpdateInterval = 30
+	DefaultMaxSimultanousUpdates = 5
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -35,6 +36,9 @@ type Account struct {
 }
 
 type updateSetup struct {
+	defIntervalCircuits   int
+	defIntervalSensors    int
+	defIntervalChannels   int
 	maxSimultanousUpdates int
 	currentUpdates        int
 	intervals             map[string]int
@@ -55,6 +59,14 @@ func NewAccount() *Account {
 		Floors:     make(map[int]Floor),
 		Circuits:   make(map[string]Circuit),
 		quitTicker: make(chan bool),
+		updateSetup: updateSetup{
+			defIntervalCircuits:   DefaultCircuitUpdateInterval,
+			defIntervalChannels:   DefaultChannelUpdateInterval,
+			defIntervalSensors:    DefaultSensorUpdateInterval,
+			currentUpdates:        0,
+			maxSimultanousUpdates: DefaultMaxSimultanousUpdates,
+			intervals:             nil,
+		},
 	}
 
 }
@@ -373,25 +385,19 @@ func (a *Account) buildMaps() {
 	}
 }
 
-func (a *Account) RegisterEventChannel(channel chan ValueChangeEvent) {
-	// register listener for consumption change events
-
-}
-
 func (a *Account) prepareUpdates() {
 	// create a new map to temporarily store the last updates for each value
 	if a.updateSetup.intervals == nil {
-		a.generateDefaultUpdateSetups()
+		a.generateDefaultUpdateIntervals()
 	}
 	a.updateSetup.lastUpdate = make(map[string]time.Time)
 	for key := range a.updateSetup.intervals {
 		a.updateSetup.lastUpdate[key] = time.Now()
 	}
 	a.updateSetup.currentUpdates = 0
-	a.updateSetup.maxSimultanousUpdates = 5
 }
 
-func (a *Account) generateDefaultUpdateSetups() {
+func (a *Account) generateDefaultUpdateIntervals() {
 	a.updateSetup.intervals = make(map[string]int)
 	for devID, dev := range a.Devices {
 		for i := range dev.Sensors {
@@ -441,15 +447,16 @@ func (a *Account) RunUpdates() {
 	}()
 }
 
-func (a *Account) decreaseUpdateCounter() {
+func (a *Account) setUpdateTimeStamp(id string) {
 	a.updateSetup.currentUpdates--
+	a.updateSetup.lastUpdate[id] = time.Now()
 }
 
 func (a *Account) performUpdate(id string) {
 
-	defer a.decreaseUpdateCounter()
+	defer a.setUpdateTimeStamp(id)
 
-	fmt.Printf("\r\n%s (%d)", id, a.updateSetup.currentUpdates)
+	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.updateSetup.currentUpdates, a.updateSetup.maxSimultanousUpdates)
 
 	s := strings.Split(id, ".")
 
@@ -464,7 +471,7 @@ func (a *Account) performUpdate(id string) {
 		}
 		a.UpdateCircuitConsumptionValue(s[1])
 		a.UpdateCircuitConsumptionValue(s[1])
-		a.updateSetup.lastUpdate[id] = time.Now()
+
 	case "sensor":
 		if len(s) != 3 {
 			return
@@ -478,18 +485,20 @@ func (a *Account) performUpdate(id string) {
 			return
 		}
 		a.UpdateSensorValue(sensor)
-		a.updateSetup.lastUpdate[id] = time.Now()
+
 	case "channel":
 		// not implemented yet
-		a.updateSetup.lastUpdate[id] = time.Now()
+
 		return
 	default:
 		// place error logging for invalid id over here
-		a.updateSetup.lastUpdate[id] = time.Now()
+
 	}
 
 }
 
+// StopUpdates stops the autonomous updater. Values will not requested until
+// updater will be started again
 func (a *Account) StopUpdates() {
 	a.quitTicker <- true
 }
