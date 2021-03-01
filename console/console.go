@@ -11,9 +11,9 @@ package main
 *                                          /____/                                                                         /____/
 *
 *
-*	Console file is not needed for using the library. It contains console utilities that allows a
-*   stand-alone usage of the library for the terminal. It could be seen as reference implementation
-*   for demonstrating the usage of that library.
+*	The file console.go is not needed for using the library. It contains console utilities that allows a
+*   stand-alone command line usage of the library. It could be seen as reference implementation
+*   for demonstrating the capabilities of that digitalstorm go-library.
 *
 *	Structure of this file:			console.go  ┐
 *												├ main()
@@ -31,7 +31,10 @@ import (
 	"strconv"
 	"strings"
 
+	"log"
+
 	"github.com/connctd/digitalstrom"
+	"github.com/go-logr/stdr"
 )
 
 // node Printing helper structure to build a tree with leafs (simple string) and child nodes.
@@ -43,8 +46,12 @@ type node struct {
 }
 
 func main() {
+
+	setLogger()
+
 	printWelcomeMsg()
 
+	// generate new Account instance
 	account := *digitalstrom.NewAccount()
 
 	// evaluate program arguments
@@ -98,6 +105,15 @@ func readNextCommand(r *bufio.Reader) string {
 	text = strings.TrimSuffix(text, "\n")
 	fmt.Print("\r\n\033[0m")
 	return text
+}
+
+func setLogger() {
+	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+
+	digitalstrom.SetLogger(stdr.New(log.New(f, "", log.LstdFlags|log.Lshortfile)))
 }
 
 // ---------------------------- Command Processing ----------------------------------
@@ -179,7 +195,7 @@ func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 
 func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
 	if len(cmd) != 4 {
-		fmt.Println("Error. No valid register command.")
+		fmt.Println("Error. Not a valid register command.")
 		return
 	}
 	atoken, err := a.RegisterApplication(cmd[3], cmd[1], cmd[2])

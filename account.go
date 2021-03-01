@@ -3,6 +3,7 @@ package digitalstrom
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,6 +34,9 @@ type Account struct {
 	PollingSetup      PollingSetup
 	pollingHelpers    pollingHelpers
 	quitTickerChannel chan bool
+
+	// events
+	listeners [](chan ValueChangeEvent)
 }
 
 // PollingSetup defines update settings for automated value polling
@@ -54,7 +58,6 @@ type pollingHelpers struct {
 // NewAccount sets connection baseURL to default, generates maps and returns
 // empty Account instance
 func NewAccount() *Account {
-
 	return &Account{
 		Connection: Connection{
 			BaseURL: DefautBaseURL,
@@ -79,6 +82,10 @@ func NewAccount() *Account {
 			mapMutex:          &sync.Mutex{},
 		},
 	}
+
+}
+
+func (a *Account) SubsribeChannel(channel chan ValueChangeEvent) {
 
 }
 
@@ -108,19 +115,27 @@ func (a *Account) GetStructure() *Structure {
 
 // Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
 func (a *Account) Init() error {
+	logger.Info("account initialization")
+	logger.Info("performing application login")
+	logger.Info("irgendein info")
 	err := a.ApplicationLogin()
 	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
 		return err
 	}
+	logger.Info("requesting complete structure")
 	_, err = a.RequestStructure()
 	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
 		return err
 	}
+	logger.Info("requesting circuits")
 	_, err = a.RequestCircuits()
 	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
 		return err
 	}
-
+	logger.Info("account successfully initialized")
 	return nil
 }
 
@@ -526,7 +541,7 @@ func (a *Account) performUpdate(id string) {
 	a.pollingHelpers.activePollingMap[id] = time.Now()
 	a.pollingHelpers.mapMutex.Unlock()
 
-	//fmt.Printf("\r\nupdating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls)
+	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls)
 
 	// ids are separated by '.'
 	s := strings.Split(id, ".")

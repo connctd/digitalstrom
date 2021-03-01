@@ -123,6 +123,8 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 // doRequest is giving back the error and is not trying to login automatically
 func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
 
+	logger.Info("performing http-request: " + url)
+
 	req, err := c.generateHTTPRequest(url, method, body, params)
 	if err != nil {
 		return nil, err
@@ -130,6 +132,7 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
+		logger.Error(err, "unable to perform http request")
 		return nil, err
 	}
 
@@ -137,11 +140,14 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	// TODO: generate a better error message according to StatusCode
 	if res.StatusCode != http.StatusOK {
-		return nil, &RequestError{"Unexpected Resonse for " + url, res.StatusCode, *req}
+		err := &RequestError{"Unexpected Resonse for " + url, res.StatusCode, *req}
+		logger.Error(err, "unable to perform http request")
+		return nil, err
 	}
 	if res.Header.Get("Content-Length") != "0" {
 		resp, err := ioutil.ReadAll(res.Body)
 		if err != nil {
+			logger.Error(err, "unable to read response body (content length: "+res.Header.Get("Content-Length")+")")
 			return nil, err
 		}
 		return convertToRequestResult(resp)
@@ -183,38 +189,52 @@ func (c *Connection) applicationLogin() error {
 // further user credentials (applicationLogin). Returns the application token or an error. The application token will not be assigned automatically.
 // Thus, in order to use the generated application token, it has to be set afterwards.
 func (c *Connection) register(username string, password string, applicationName string) (string, error) {
+
+	logger.Info("registering new application with name " + applicationName)
+
 	// request an ApplicationToken
 	res, err := c.doRequest(c.BaseURL+"/json/system/requestApplicationToken", get, "", map[string]string{"applicationName": applicationName})
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
 	if !res.OK {
-		return "", errors.New(res.Message)
+		e := errors.New(res.Message)
+		logger.Error(e, "registration has been aborted")
+		return "", e
 	}
+
 	applicationToken := res.Result["applicationToken"].(string)
+
+	logger.Info("got application token for '" + applicationName)
 
 	// performing a login in order to generate a temporary session token
 	// HINT during the http request generation, parameters will be URL-encoded. This leads to a problem with the password
 	// when it contains symbols that will change during the encoding problem. The digitalstrom server is not performing an
 	// URL decoding to restore the password
 	// This is a workaround, that might fail with passwords which are not url compatible
+	logger.Info("request session token with user credentials")
 	res, err = c.doRequest(c.BaseURL+"/json/system/login?user="+username+"&password="+password, get, "", nil)
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
 	if !res.OK {
-		return "", errors.New(res.Message)
+		e := errors.New(res.Message)
+		logger.Error(e, "registration has been aborted")
+		return "", e
 	}
 
 	sessionToken := res.Result["token"].(string)
-
+	logger.Info("got session token, trying to enable the application token")
 	// use the session token to enable the application token. Future logins wont need user credentials anymore, the application token will be used to
 	// perform an application login
 	res, err = c.doRequest(c.BaseURL+"/json/system/enableToken", get, "", map[string]string{"applicationToken": applicationToken, "token": sessionToken})
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
-
+	logger.Info("application '" + applicationName + " has been registered successfully")
 	return applicationToken, nil
 }
 
