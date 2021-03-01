@@ -13,8 +13,8 @@ import (
 type requestMethod string
 
 const (
-	// DEFAULT_BASE_URL Will be set as default Base Url for connection
-	DEFAULT_BASE_URL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
+	// DefautBaseURL Will be set as default Base Url for connections
+	DefautBaseURL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
 )
 
 // RequestError structure to give a proper error that could occur during
@@ -43,13 +43,13 @@ type RequestResult struct {
 }
 
 const (
-	get    requestMethod = "GET"
-	put    requestMethod = "PUT"
-	post   requestMethod = "POST"
-	delete requestMethod = "DELETE"
+	get  requestMethod = "GET"
+	put  requestMethod = "PUT"
+	post requestMethod = "POST"
 )
 
-// Connection Holds access credentials and URL information for a specific account. Contains routines for GET, PUSH, PUT and DELETE
+// Connection Holds access credentials and URL information for a specific account.
+// Contains routines for GET, PUSH, PUT and DELETE
 type Connection struct {
 	SessionToken     string
 	ApplicationToken string
@@ -67,14 +67,28 @@ func (c *Connection) Post(url string, body string) (*RequestResult, error) {
 	return c.Request(url, post, body, nil)
 }
 
-// Delete Performs a Delete Request and returns the response body as string
-func (c *Connection) Delete(url string) (*RequestResult, error) {
-	return c.Request(url, delete, "", nil)
-}
-
 // Put Performs a Put Request with the given content and returns the response body as string
 func (c *Connection) Put(url string, body string) (*RequestResult, error) {
 	return c.Request(url, put, body, nil)
+}
+
+// Request is performing an Http-Request. In case it receives an HTTP-Error 403, an application Login will be performed and the
+// request will be repeated (only one time).
+func (c *Connection) Request(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
+	res, err := c.doRequest(url, method, body, params)
+	if err != nil {
+		if reqErr, ok := err.(*RequestError); ok {
+			if reqErr.StatusCode == 403 {
+				e := c.applicationLogin()
+				if e != nil {
+					return res, e
+				}
+				return c.doRequest(url, method, body, params)
+			}
+		}
+		return res, err
+	}
+	return res, nil
 }
 
 func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
@@ -105,28 +119,11 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 	return req, nil
 }
 
-// Request is performing an Http-Request. In case it receives an HTTP-Error 403, an application Login will be performed and the
-// request will be repeated (only one time).
-func (c *Connection) Request(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
-	res, err := c.doRequest(url, method, body, params)
-	if err != nil {
-		if reqErr, ok := err.(*RequestError); ok {
-			if reqErr.StatusCode == 403 {
-				e := c.applicationLogin()
-				if e != nil {
-					return res, e
-				}
-				return c.doRequest(url, method, body, params)
-			}
-		}
-		return res, err
-	}
-	return res, nil
-}
-
 // doRequest is performing an http request. It is not recommended to use method "Connection.Request". In case the session token has been expired
 // doRequest is giving back the error and is not trying to login automatically
 func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
+
+	logger.Info("performing http-request: " + url)
 
 	req, err := c.generateHTTPRequest(url, method, body, params)
 	if err != nil {
@@ -135,6 +132,7 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
+		logger.Error(err, "unable to perform http request")
 		return nil, err
 	}
 
@@ -142,11 +140,14 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	// TODO: generate a better error message according to StatusCode
 	if res.StatusCode != http.StatusOK {
-		return nil, &RequestError{"Unexpected Resonse for " + url, res.StatusCode, *req}
+		err := &RequestError{"Unexpected Resonse for " + url, res.StatusCode, *req}
+		logger.Error(err, "unable to perform http request")
+		return nil, err
 	}
 	if res.Header.Get("Content-Length") != "0" {
 		resp, err := ioutil.ReadAll(res.Body)
 		if err != nil {
+			logger.Error(err, "unable to read response body (content length: "+res.Header.Get("Content-Length")+")")
 			return nil, err
 		}
 		return convertToRequestResult(resp)
@@ -188,38 +189,52 @@ func (c *Connection) applicationLogin() error {
 // further user credentials (applicationLogin). Returns the application token or an error. The application token will not be assigned automatically.
 // Thus, in order to use the generated application token, it has to be set afterwards.
 func (c *Connection) register(username string, password string, applicationName string) (string, error) {
+
+	logger.Info("registering new application with name " + applicationName)
+
 	// request an ApplicationToken
 	res, err := c.doRequest(c.BaseURL+"/json/system/requestApplicationToken", get, "", map[string]string{"applicationName": applicationName})
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
 	if !res.OK {
-		return "", errors.New(res.Message)
+		e := errors.New(res.Message)
+		logger.Error(e, "registration has been aborted")
+		return "", e
 	}
+
 	applicationToken := res.Result["applicationToken"].(string)
+
+	logger.Info("got application token for '" + applicationName)
 
 	// performing a login in order to generate a temporary session token
 	// HINT during the http request generation, parameters will be URL-encoded. This leads to a problem with the password
 	// when it contains symbols that will change during the encoding problem. The digitalstrom server is not performing an
 	// URL decoding to restore the password
 	// This is a workaround, that might fail with passwords which are not url compatible
+	logger.Info("request session token with user credentials")
 	res, err = c.doRequest(c.BaseURL+"/json/system/login?user="+username+"&password="+password, get, "", nil)
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
 	if !res.OK {
-		return "", errors.New(res.Message)
+		e := errors.New(res.Message)
+		logger.Error(e, "registration has been aborted")
+		return "", e
 	}
 
 	sessionToken := res.Result["token"].(string)
-
+	logger.Info("got session token, trying to enable the application token")
 	// use the session token to enable the application token. Future logins wont need user credentials anymore, the application token will be used to
 	// perform an application login
 	res, err = c.doRequest(c.BaseURL+"/json/system/enableToken", get, "", map[string]string{"applicationToken": applicationToken, "token": sessionToken})
 	if err != nil {
+		logger.Error(err, "registration has been aborted")
 		return "", err
 	}
-
+	logger.Info("application '" + applicationName + " has been registered successfully")
 	return applicationToken, nil
 }
 
@@ -231,19 +246,4 @@ func (c *Connection) checkApplicationToken() bool {
 func (c *Connection) checkAccessToken() bool {
 	// ToDo do propper checks
 	return c.SessionToken != ""
-}
-
-func (s *Structure) assignCrossReferences() {
-	for i := range s.Apartment.Zones {
-		for j := range s.Apartment.Zones[i].Devices {
-			device := s.Apartment.Zones[i].Devices[j]
-			for n := range device.Sensors {
-				device.Sensors[n].Index = n
-				device.Sensors[n].device = &device
-			}
-			for n := range device.OutputChannels {
-				device.OutputChannels[n].device = &device
-			}
-		}
-	}
 }

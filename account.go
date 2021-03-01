@@ -3,20 +3,56 @@ package digitalstrom
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// Default polling setup values
+const (
+	defaultSensorPollingInterval  = 30
+	defaultCircuitPollingInterval = 5
+	defaultChannelPollingInterval = 30
+	defaultMaxSimultanousPolls    = 10
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
 // faster communication
 type Account struct {
 	Connection Connection
-	Structure  Structure
+	structure  Structure
 	Devices    map[string]Device
 	Groups     map[int]Group
 	Zones      map[int]Zone
 	Floors     map[int]Floor
 	Circuits   map[string]Circuit
 	//Scenes     map[string]Scene
+
+	// updating
+	PollingSetup      PollingSetup
+	pollingHelpers    pollingHelpers
+	quitTickerChannel chan bool
+
+	// events
+	listeners [](chan ValueChangeEvent)
+}
+
+// PollingSetup defines update settings for automated value polling
+type PollingSetup struct {
+	DefaultCircuitsPollingInterval int `json:"default_circuit_polling_interval"`
+	DefaultSensorsPollingInterval  int `json:"default_sensors_polling_interval"`
+	DefaultChannelsPollingInterval int `json:"default_channels_polling_interval"`
+	MaxParallelPolls               int `json:"max_parallel_polls"`
+}
+
+type pollingHelpers struct {
+	parallelPollCount int
+	pollIntervalMap   map[string]int
+	lastPollMap       map[string]time.Time
+	activePollingMap  map[string]time.Time
+	mapMutex          *sync.Mutex
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
@@ -24,78 +60,39 @@ type Account struct {
 func NewAccount() *Account {
 	return &Account{
 		Connection: Connection{
-			BaseURL: DEFAULT_BASE_URL,
+			BaseURL: DefautBaseURL,
 		},
-		Devices:  make(map[string]Device),
-		Groups:   make(map[int]Group),
-		Zones:    make(map[int]Zone),
-		Floors:   make(map[int]Floor),
-		Circuits: make(map[string]Circuit),
+		Devices:           make(map[string]Device),
+		Groups:            make(map[int]Group),
+		Zones:             make(map[int]Zone),
+		Floors:            make(map[int]Floor),
+		Circuits:          make(map[string]Circuit),
+		quitTickerChannel: make(chan bool),
+		PollingSetup: PollingSetup{
+			DefaultCircuitsPollingInterval: defaultCircuitPollingInterval,
+			DefaultChannelsPollingInterval: defaultChannelPollingInterval,
+			DefaultSensorsPollingInterval:  defaultSensorPollingInterval,
+			MaxParallelPolls:               defaultMaxSimultanousPolls,
+		},
+		pollingHelpers: pollingHelpers{
+			parallelPollCount: 0,
+			pollIntervalMap:   nil,
+			activePollingMap:  make(map[string]time.Time),
+			lastPollMap:       make(map[string]time.Time),
+			mapMutex:          &sync.Mutex{},
+		},
 	}
+
 }
 
-// SetSessionToken for manually setting the token. Be aware of a timout for each session token. It is recommended to perform
-// an ApplicationLogin using the ApplicationToken. This will update the session token automatically.
-func (a *Account) SetSessionToken(token string) {
-	a.Connection.SessionToken = token
+func (a *Account) SubsribeChannel(channel chan ValueChangeEvent) {
+
 }
 
-// SetApplicationToken that will be used for ApplicationLogin
-func (a *Account) SetApplicationToken(token string) {
-	a.Connection.ApplicationToken = token
-}
-
-// SetURL sets the BaseUrl. This method should only be called when another URL should be used than the default one
-func (a *Account) SetURL(url string) {
-	a.Connection.BaseURL = url
-}
-
-// Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
-func (a *Account) Init() error {
-	err := a.ApplicationLogin()
-	if err != nil {
-		return err
-	}
-	_, err = a.RequestStructure()
-	if err != nil {
-		return err
-	}
-	_, err = a.RequestCircuits()
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-// UpdateOnValue ...
-func (a *Account) UpdateOnValue(device *Device) (bool, error) {
-	return false, errors.New("not implemented yet")
-}
-
-// UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
-// receive the acutal meter value. This value wil be assign to the circuit and additionally
-// returned. In case an error occured during the request, -1 will be return as well as the
-// error itself.
-func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
-	circuit, ok := a.Circuits[circuitID]
-	if !ok {
-		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
-	}
-
-	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
-	if err != nil {
-		return -1, err
-	}
-	if !res.OK {
-		return -1, errors.New(res.Message)
-	}
-	value, ok := res.Result["meterValue"].(float64)
-	if !ok {
-		return -1, errors.New("unexpected response - no field 'meterValue' found in response")
-	}
-	circuit.MeterValue = int(value)
-	a.Circuits[circuitID] = circuit
-	return int(value), nil
+// ApplicationLogin uses the assigned applicationToken to generate a session token. The timeout depends on server settings,
+// default is 180 seconds. This timeout will be automatically reset by every performed request.
+func (a *Account) ApplicationLogin() error {
+	return a.Connection.applicationLogin()
 }
 
 //GetSensor Returning the sensor with die index ID <sensorIndex> of device with display ID <deviceID> or nil when either
@@ -111,78 +108,35 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
-// SetOutputChannelValue sets the value for the given OutputChannel. Returns error
-func (a *Account) SetOutputChannelValue(channel *OutputChannel, value string) error {
-	params := make(map[string]string)
-	params["dsid"] = channel.device.ID
-	params["channelvalues"] = string(channel.ChannelType) + "=" + value
+// GetStructure returns the structure of the account.
+func (a *Account) GetStructure() *Structure {
+	return &a.structure
+}
 
-	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/setOutputChannelValue", get, "", params)
+// Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
+func (a *Account) Init() error {
+	logger.Info("account initialization")
+	logger.Info("performing application login")
+	logger.Info("irgendein info")
+	err := a.ApplicationLogin()
 	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
 		return err
 	}
-
-	if !res.OK {
-		return errors.New(res.Message)
+	logger.Info("requesting complete structure")
+	_, err = a.RequestStructure()
+	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
+		return err
 	}
+	logger.Info("requesting circuits")
+	_, err = a.RequestCircuits()
+	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
+		return err
+	}
+	logger.Info("account successfully initialized")
 	return nil
-
-}
-
-// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
-// the the sensor.
-func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
-	params := make(map[string]string)
-	params["dsid"] = sensor.device.ID
-	params["sensorIndex"] = strconv.Itoa(sensor.Index)
-	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
-	if err != nil {
-		return 0, err
-	}
-	if !res.OK {
-		return 0, errors.New(res.Message)
-	}
-
-	value, ok := res.Result["sensorValue"].(float64)
-	if !ok {
-		return 0, errors.New("unable to extract sensorValue from request result")
-	}
-	sensor.Value = value
-
-	return value, nil
-}
-
-// UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
-// The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
-// return or an error (when ocurred)
-func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
-	circuit, ok := a.Circuits[circuitID]
-	if !ok {
-		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
-	}
-
-	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
-	if err != nil {
-		return -1, err
-	}
-	if !res.OK {
-		return -1, errors.New(res.Message)
-	}
-	value, ok := res.Result["consumption"].(float64)
-	if !ok {
-		return -1, errors.New("unexpected response - no field consumption found in response")
-	}
-
-	circuit.Consumption = int(value)
-	a.Circuits[circuitID] = circuit
-
-	return int(value), nil
-}
-
-// ApplicationLogin uses the assigned applicationToken to generate a session token. The timeout depends on server settings,
-// default is 180 seconds. This timeout will be automatically reset by every performed request.
-func (a *Account) ApplicationLogin() error {
-	return a.Connection.applicationLogin()
 }
 
 // RegisterApplication an application with the given applicitonName. Performs a request to generate an application token. A second request requires the
@@ -191,56 +145,6 @@ func (a *Account) ApplicationLogin() error {
 // Thus, in order to use the generated application token, it has to be set afterwards (Account.SetApplicationToken).
 func (a *Account) RegisterApplication(applicationName string, username string, password string) (string, error) {
 	return a.Connection.register(username, password, applicationName)
-}
-
-// RequestStructure performs a getStructure request. The complete Structure will be assigned
-// to the account automatically when request was sucessfull, otherwise the occured error will
-// be returned.
-func (a *Account) RequestStructure() (*Structure, error) {
-
-	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getStructure")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !res.OK {
-		return nil, errors.New(res.Message)
-	}
-	jsonString, _ := json.Marshal(res.Result)
-
-	s := Structure{}
-	json.Unmarshal(jsonString, &s)
-
-	a.Structure = s
-	s.assignCrossReferences() // needs to be called
-
-	// We have received the complete structure tree
-	// For fast access, the account has maps for devices, groups, etc..
-	// these maps need to be filled
-	a.buildMaps()
-	// return the shit
-	return &s, nil
-}
-
-// RequestSystemInfo performs a get system/version request and returns the result or
-// the error that has been occurred
-func (a *Account) RequestSystemInfo() (*System, error) {
-	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/system/version")
-
-	if err != nil {
-		return nil, err
-	}
-
-	if !res.OK {
-		return nil, errors.New(res.Message)
-	}
-	jsonString, _ := json.Marshal(res.Result)
-
-	s := System{}
-	json.Unmarshal(jsonString, &s)
-
-	return &s, nil
 }
 
 // RequestCircuits performs a getCircuits request. The received circuit array
@@ -278,6 +182,174 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 	return circuits, nil
 }
 
+// RequestStructure performs a getStructure request. The complete Structure will be assigned
+// to the account automatically when request was sucessfull, otherwise the occured error will
+// be returned.
+func (a *Account) RequestStructure() (*Structure, error) {
+
+	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getStructure")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !res.OK {
+		return nil, errors.New(res.Message)
+	}
+	jsonString, _ := json.Marshal(res.Result)
+
+	s := Structure{}
+	json.Unmarshal(jsonString, &s)
+
+	// assign the structure to our account
+	a.setStructure(s)
+
+	// return the shit
+	return &s, nil
+}
+
+// RequestSystemInfo performs a get system/version request and returns the result or
+// the error that has been occurred
+func (a *Account) RequestSystemInfo() (*System, error) {
+	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/system/version")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !res.OK {
+		return nil, errors.New(res.Message)
+	}
+	jsonString, _ := json.Marshal(res.Result)
+
+	s := System{}
+	json.Unmarshal(jsonString, &s)
+
+	return &s, nil
+}
+
+// ResetPollingIntervals will remove all intervals for sensors,
+// circuits and output channels. This method will stop the
+// automated update method. When StartUpdates() is called, default
+// polling intervals for sensors, circuits and output channels will
+// be set to default.
+func (a *Account) ResetPollingIntervals() {
+	//a.StopUpdates() only stop when update routine is running
+	a.pollingHelpers.pollIntervalMap = make(map[string]int)
+}
+
+// RunUpdates starts the update routine. It calls the internal prepareUpdates function.
+// When no update intervals are given in advance, a complete list of update intervals will
+// be generated automatically (including all sensors, output channesl and circuits) by using
+// the related default intervals.
+func (a *Account) RunUpdates() {
+	a.prepareUpdates()
+	ticker := *time.NewTicker(time.Second)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				for id, interval := range a.pollingHelpers.pollIntervalMap {
+					if a.isUpdateIntervalReached(id, interval) {
+						if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
+							a.pollingHelpers.mapMutex.Lock()
+							_, ok := a.pollingHelpers.activePollingMap[id]
+							a.pollingHelpers.mapMutex.Unlock()
+							if !ok {
+								a.pollingHelpers.parallelPollCount++
+								go a.performUpdate(id)
+							}
+						}
+					}
+				}
+			case <-a.quitTickerChannel:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// SetApplicationToken that will be used for ApplicationLogin
+func (a *Account) SetApplicationToken(token string) {
+	a.Connection.ApplicationToken = token
+}
+
+// SetDefaultUpdateIntervals is setting for all sensors, channels and circuits
+// the corresponding default interval. Intervals that were set manually before, will be overwritten.
+func (a *Account) SetDefaultUpdateIntervals() {
+	a.ResetPollingIntervals()
+	for devID, dev := range a.Devices {
+		for i := range dev.Sensors {
+			id := "sensor." + devID + "." + strconv.Itoa(i)
+			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultSensorsPollingInterval
+		}
+		for i := range dev.OutputChannels {
+			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
+			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultChannelsPollingInterval
+		}
+	}
+	for circuitID := range a.Circuits {
+		a.pollingHelpers.pollIntervalMap["circuit."+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
+	}
+}
+
+// SetOutputChannelValue sets the value for the given OutputChannel. Returns error
+func (a *Account) SetOutputChannelValue(channel *OutputChannel, value string) error {
+	params := make(map[string]string)
+	params["dsid"] = channel.device.ID
+	params["channelvalues"] = string(channel.ChannelType) + "=" + value
+
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/setOutputChannelValue", get, "", params)
+	if err != nil {
+		return err
+	}
+
+	if !res.OK {
+		return errors.New(res.Message)
+	}
+	return nil
+
+}
+
+// SetSessionToken for manually setting the token. Be aware of a timout for each session token. It is recommended to perform
+// an ApplicationLogin using the ApplicationToken. This will update the session token automatically.
+func (a *Account) SetSessionToken(token string) {
+	a.Connection.SessionToken = token
+}
+
+// SetUpdateInterval sets the automatic update interval for the element identified
+// by given id. The id is a combination of eighter "sensor.<deviceID>.<sensor index>,
+// channel.<deviceID>.<ChannelType> or circuit.<circuitID>. When setting an update interval,
+// only those elements will be updated, that were added. To set default update intervals for
+// all elements, call SetDefaultUpdateIntervals()
+func (a *Account) SetUpdateInterval(id string, interval int) error {
+	if a.pollingHelpers.pollIntervalMap == nil {
+		a.pollingHelpers.pollIntervalMap = make(map[string]int)
+	}
+
+	s := strings.Split(id, ".")
+	if len(s) < 2 {
+		return errors.New(id + " is not a valid update element identifier")
+	}
+
+	// ToDo: do better id test (sensor existing, channel existing, circuit existing)
+
+	a.pollingHelpers.pollIntervalMap[id] = interval
+	return nil
+}
+
+// SetURL sets the BaseUrl. This method should only be called when another URL should be used than the default one
+func (a *Account) SetURL(url string) {
+	a.Connection.BaseURL = url
+}
+
+// StopUpdates stops the autonomous updater. Values will not requested until
+// updater will be started again
+func (a *Account) StopUpdates() {
+	a.quitTickerChannel <- true
+}
+
 // TurnOn sends eithe a turnOn or turnOff request for the given 'device', depending on value of paramter 'on'
 func (a *Account) TurnOn(device *Device, on bool) error {
 
@@ -300,24 +372,213 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 	return nil
 }
 
+// UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
+// receive the acutal meter value. This value wil be assign to the circuit and additionally
+// returned. In case an error occured during the request, -1 will be return as well as the
+// error itself.
+func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
+	circuit, ok := a.Circuits[circuitID]
+	if !ok {
+		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
+	}
+
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
+	if err != nil {
+		return -1, err
+	}
+	if !res.OK {
+		return -1, errors.New(res.Message)
+	}
+	value, ok := res.Result["meterValue"].(float64)
+	if !ok {
+		return -1, errors.New("unexpected response - no field 'meterValue' found in response")
+	}
+
+	newValue := int(value)
+
+	if newValue != circuit.MeterValue {
+		//	oldValue := circuit.MeterValue
+		circuit.MeterValue = newValue
+		a.Circuits[circuitID] = circuit
+		//	dispatchValueChange(channel, conumption, oldvalue, newvalue)
+		//a.OnCircuitMeterValueUpdate <- CircuitMeterValueUpdateEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
+	}
+
+	return newValue, nil
+}
+
+// UpdateOnValue ...
+func (a *Account) UpdateOnValue(device *Device) (bool, error) {
+	return false, errors.New("not implemented yet")
+}
+
+// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
+// the the sensor.
+func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
+	params := make(map[string]string)
+	params["dsid"] = sensor.device.ID
+	params["sensorIndex"] = strconv.Itoa(sensor.Index)
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
+	if err != nil {
+		return 0, err
+	}
+	if !res.OK {
+		return 0, errors.New(res.Message)
+	}
+
+	value, ok := res.Result["sensorValue"].(float64)
+	//fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
+	if !ok {
+		return 0, errors.New("unable to extract sensorValue from request result")
+	}
+	sensor.Value = value
+
+	return value, nil
+}
+
+// UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
+// The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
+// return or an error (when ocurred)
+func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
+
+	circuit, ok := a.Circuits[circuitID]
+	if !ok {
+		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
+	}
+
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
+	if err != nil {
+		return -1, err
+	}
+	if !res.OK {
+		return -1, errors.New(res.Message)
+	}
+	value, ok := res.Result["consumption"].(float64)
+	if !ok {
+		return -1, errors.New("unexpected response - no field consumption found in response")
+	}
+
+	newValue := int(value)
+
+	if newValue != circuit.Consumption {
+		//oldValue := circuit.Consumption
+		circuit.Consumption = newValue
+		a.Circuits[circuitID] = circuit
+
+	}
+	return newValue, nil
+}
+
+// SetStructure assigns a structure to the account, maps will be build and cross references assigned.
+// It is highy recommended to use this function in order to assign a structure rather than assign them directly.
+func (a *Account) setStructure(structure Structure) {
+	a.structure = structure
+	a.structure.assignCrossReferences()
+	a.buildMaps()
+}
+
 // buldMaps is generating maps for devices, circuits, zones, groups
 // and floors for fast access. It should be called whenever a structure,
 // circuit or groups are requested
 func (a *Account) buildMaps() {
-	for i := range a.Structure.Apartment.Zones {
-		zone := a.Structure.Apartment.Zones[i]
+	for i := range a.structure.Apartment.Zones {
+		zone := a.structure.Apartment.Zones[i]
 		a.Zones[zone.ID] = zone
-		for j := range a.Structure.Apartment.Zones[i].Groups {
-			group := a.Structure.Apartment.Zones[i].Groups[j]
+		for j := range a.structure.Apartment.Zones[i].Groups {
+			group := a.structure.Apartment.Zones[i].Groups[j]
 			a.Groups[group.ID] = group
 		}
-		for j := range a.Structure.Apartment.Zones[i].Devices {
-			device := a.Structure.Apartment.Zones[i].Devices[j]
+		for j := range a.structure.Apartment.Zones[i].Devices {
+			device := a.structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
 		}
 	}
-	for i := range a.Structure.Apartment.Floors {
-		floor := a.Structure.Apartment.Floors[i]
+	for i := range a.structure.Apartment.Floors {
+		floor := a.structure.Apartment.Floors[i]
 		a.Floors[floor.ID] = floor
 	}
+}
+
+func (a *Account) prepareUpdates() {
+	// create a new map to temporarily store the last updates for each value
+	if a.pollingHelpers.pollIntervalMap == nil {
+		a.SetDefaultUpdateIntervals()
+	}
+	a.pollingHelpers.lastPollMap = make(map[string]time.Time)
+	for key := range a.pollingHelpers.pollIntervalMap {
+		a.pollingHelpers.lastPollMap[key] = time.Now()
+	}
+	a.pollingHelpers.parallelPollCount = 0
+}
+
+// isUpdateIntervalReached checks whether the value with the given ID
+// needs to be updated.
+func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
+	t, ok := a.pollingHelpers.lastPollMap[id]
+	if !ok {
+		return true
+	}
+	return time.Now().Sub(t).Seconds() > float64(interval)
+}
+
+func (a *Account) setUpdateTimeStamp(id string) {
+	a.pollingHelpers.parallelPollCount--
+	a.pollingHelpers.mapMutex.Lock()
+	a.pollingHelpers.lastPollMap[id] = time.Now()
+	// remove id from polling list
+	// use mutex to prevent concurrent map writes
+
+	delete(a.pollingHelpers.activePollingMap, id)
+	a.pollingHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) performUpdate(id string) {
+
+	// independed from update result, set the current timestamp to reset the interval
+	defer a.setUpdateTimeStamp(id)
+	// remember that value with this id will be polled now
+	a.pollingHelpers.mapMutex.Lock()
+	a.pollingHelpers.activePollingMap[id] = time.Now()
+	a.pollingHelpers.mapMutex.Unlock()
+
+	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls)
+
+	// ids are separated by '.'
+	s := strings.Split(id, ".")
+
+	if len(s) < 2 {
+		return
+	}
+
+	switch s[0] {
+	case "circuit":
+		if len(s) != 2 {
+			return
+		}
+		a.UpdateCircuitConsumptionValue(s[1])
+		a.UpdateCircuitMeterValue(s[1])
+
+	case "sensor":
+		if len(s) != 3 {
+			return
+		}
+		number, err := strconv.Atoi(s[2])
+		if err != nil {
+			return
+		}
+		sensor, err := a.GetSensor(s[1], number)
+		if err != nil {
+			return
+		}
+		a.UpdateSensorValue(sensor)
+
+	case "channel":
+		// not implemented yet
+
+		return
+	default:
+		// place error logging for invalid id over here
+
+	}
+
 }

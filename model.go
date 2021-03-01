@@ -49,7 +49,7 @@ type Zone struct {
 	Groups    []Group  `json:"groups"`
 }
 
-// Floor
+// Floor contains Zones
 type Floor struct {
 	ID    int    `json:"id"`
 	Order int    `json:"order"`
@@ -214,25 +214,25 @@ type SensorType int
 
 // Output Channel Types (OTC)
 const (
-	OCTbrightness               OutputChannelType = "brightness"
-	OCThue                      OutputChannelType = "hue"
-	OCTsaturation               OutputChannelType = "saturation"
-	OCTcolortemp                OutputChannelType = "colortemp"
-	OCTx                        OutputChannelType = "x"
-	OCTy                        OutputChannelType = "y"
-	OCTshadePositionOutside     OutputChannelType = "shadePositionOutside"
-	OCTshadePositionIndoor      OutputChannelType = "shadePositionIndoor"
-	OCTshadeOpeningAngleOutside OutputChannelType = "shadeOpeningAngleOutside"
-	OCTshadeOpeningAngleInside  OutputChannelType = "shadeOpeningAngleInside"
-	OCTtransparency             OutputChannelType = "transparency"
-	OCTairFlowIntensity         OutputChannelType = "airFlowIntensity"
-	OCTairFlowDirection         OutputChannelType = "airFlowDirection"
-	OCTairFlapPosition          OutputChannelType = "airFlapPosition"
-	OCTairLouverPosition        OutputChannelType = "airLouverPosition"
-	OCTheatingPower             OutputChannelType = "heatingPower"
-	OCTcoolingCapacity          OutputChannelType = "coolingCapacity"
-	OCTaudioVolume              OutputChannelType = "audioVolume"
-	OCTpowerState               OutputChannelType = "powerState"
+	OCTbrightness               = OutputChannelType("brightness")
+	OCThue                      = OutputChannelType("hue")
+	OCTsaturation               = OutputChannelType("saturation")
+	OCTcolortemp                = OutputChannelType("colortemp")
+	OCTx                        = OutputChannelType("x")
+	OCTy                        = OutputChannelType("y")
+	OCTshadePositionOutside     = OutputChannelType("shadePositionOutside")
+	OCTshadePositionIndoor      = OutputChannelType("shadePositionIndoor")
+	OCTshadeOpeningAngleOutside = OutputChannelType("shadeOpeningAngleOutside")
+	OCTshadeOpeningAngleInside  = OutputChannelType("shadeOpeningAngleInside")
+	OCTtransparency             = OutputChannelType("transparency")
+	OCTairFlowIntensity         = OutputChannelType("airFlowIntensity")
+	OCTairFlowDirection         = OutputChannelType("airFlowDirection")
+	OCTairFlapPosition          = OutputChannelType("airFlapPosition")
+	OCTairLouverPosition        = OutputChannelType("airLouverPosition")
+	OCTheatingPower             = OutputChannelType("heatingPower")
+	OCTcoolingCapacity          = OutputChannelType("coolingCapacity")
+	OCTaudioVolume              = OutputChannelType("audioVolume")
+	OCTpowerState               = OutputChannelType("powerState")
 )
 
 // Application Types
@@ -248,9 +248,9 @@ const (
 	ATrecirculation        ApplicationType = 12
 	ATtemperatureControl   ApplicationType = 48
 	ATapartmentVentilation ApplicationType = 64
-	ATsingleDevice         ApplicationType = -1 // no id defined
-	ATsecurity             ApplicationType = -2 // no id defined
-	ATaccess               ApplicationType = -3 // no id defined
+	ATsingleDevice         ApplicationType = -1 // no id defined in specification
+	ATsecurity             ApplicationType = -2 // no id defined in specification
+	ATaccess               ApplicationType = -3 // no id defined in specification
 )
 
 // Available Colors
@@ -481,13 +481,14 @@ func (st SensorType) GetName() string {
 	}
 }
 
+// GetOutputChannel returns a corresponding channel with the given output channel type.
 func (d *Device) GetOutputChannel(outputChannelType OutputChannelType) (*OutputChannel, error) {
 	for i := range d.OutputChannels {
 		if d.OutputChannels[i].ChannelType == outputChannelType {
 			return &d.OutputChannels[i], nil
 		}
 	}
-	return nil, errors.New("device '" + d.DisplayID + "' has no output channel of type '" + string(outputChannelType) + "'")
+	return nil, errors.New("device '" + d.DisplayID + "' has no output channel of application type '" + string(outputChannelType) + "'")
 }
 
 // GenerateApartment takes a json string and generates and returns an instance of structure Apartment
@@ -501,4 +502,19 @@ func GenerateApartment(j string) (*Apartment, error) {
 	}
 
 	return &apartement, nil
+}
+
+func (s *Structure) assignCrossReferences() {
+	for i := range s.Apartment.Zones {
+		for j := range s.Apartment.Zones[i].Devices {
+			device := s.Apartment.Zones[i].Devices[j]
+			for n := range device.Sensors {
+				device.Sensors[n].Index = n
+				device.Sensors[n].device = &device
+			}
+			for n := range device.OutputChannels {
+				device.OutputChannels[n].device = &device
+			}
+		}
+	}
 }
