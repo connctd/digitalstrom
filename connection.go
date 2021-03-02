@@ -123,7 +123,7 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 // doRequest is giving back the error and is not trying to login automatically
 func (c *Connection) doRequest(url string, method requestMethod, body string, params map[string]string) (*RequestResult, error) {
 
-	logger.Info("performing http-request: " + url)
+	//	logger.Info("performing http-request: " + url)
 
 	req, err := c.generateHTTPRequest(url, method, body, params)
 	if err != nil {

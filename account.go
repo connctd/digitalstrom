@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	stdlog "log"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 )
 
 // Default polling setup values
@@ -36,7 +41,7 @@ type Account struct {
 	quitTickerChannel chan bool
 
 	// events
-	listeners [](chan ValueChangeEvent)
+	eventHelpers eventHelpers
 }
 
 // PollingSetup defines update settings for automated value polling
@@ -53,6 +58,18 @@ type pollingHelpers struct {
 	lastPollMap       map[string]time.Time
 	activePollingMap  map[string]time.Time
 	mapMutex          *sync.Mutex
+}
+
+type eventHelpers struct {
+	valueChangeReceiver map[string]ValueChangeReceiver
+	mapMutex            *sync.Mutex
+}
+
+var logger = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile))
+
+//SetLogger sets a custom logger
+func SetLogger(newLogger logr.Logger) {
+	logger = newLogger.WithName("lib-digitalstrom")
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
@@ -81,11 +98,11 @@ func NewAccount() *Account {
 			lastPollMap:       make(map[string]time.Time),
 			mapMutex:          &sync.Mutex{},
 		},
+		eventHelpers: eventHelpers{
+			valueChangeReceiver: make(map[string]ValueChangeReceiver),
+			mapMutex:            &sync.Mutex{},
+		},
 	}
-
-}
-
-func (a *Account) SubsribeChannel(channel chan ValueChangeEvent) {
 
 }
 
@@ -350,6 +367,18 @@ func (a *Account) StopUpdates() {
 	a.quitTickerChannel <- true
 }
 
+// SubsribeValueChangeReceiver adds a pointer to a ValueChangeReceiver with the given id. Everytime a value of a sensor, circuit or
+// output channel changes, the corresponding callback function of the receiver will be called
+func (a *Account) SubsribeValueChangeReceiver(id string, receiver ValueChangeReceiver) {
+	if receiver == nil {
+		return
+	}
+	a.eventHelpers.mapMutex.Lock()
+	logger.Info(fmt.Sprintf("receiver %s added to value change receiver map (mapsize = %d)", id, len(a.eventHelpers.valueChangeReceiver)))
+	a.eventHelpers.valueChangeReceiver[id] = receiver
+	a.eventHelpers.mapMutex.Unlock()
+}
+
 // TurnOn sends eithe a turnOn or turnOff request for the given 'device', depending on value of paramter 'on'
 func (a *Account) TurnOn(device *Device, on bool) error {
 
@@ -370,6 +399,13 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 	}
 
 	return nil
+}
+
+// UnsubscribeValueChangeReceiver removes an event channel.
+func (a *Account) UnsubscribeValueChangeReceiver(id string) {
+	a.eventHelpers.mapMutex.Lock()
+	delete(a.eventHelpers.valueChangeReceiver, id)
+	a.eventHelpers.mapMutex.Unlock()
 }
 
 // UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
@@ -397,43 +433,13 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 	newValue := int(value)
 
 	if newValue != circuit.MeterValue {
-		//	oldValue := circuit.MeterValue
+		oldValue := circuit.MeterValue
 		circuit.MeterValue = newValue
 		a.Circuits[circuitID] = circuit
-		//	dispatchValueChange(channel, conumption, oldvalue, newvalue)
-		//a.OnCircuitMeterValueUpdate <- CircuitMeterValueUpdateEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
+		a.dispatchMeterValueChange(circuitID, oldValue, newValue)
 	}
 
 	return newValue, nil
-}
-
-// UpdateOnValue ...
-func (a *Account) UpdateOnValue(device *Device) (bool, error) {
-	return false, errors.New("not implemented yet")
-}
-
-// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
-// the the sensor.
-func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
-	params := make(map[string]string)
-	params["dsid"] = sensor.device.ID
-	params["sensorIndex"] = strconv.Itoa(sensor.Index)
-	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
-	if err != nil {
-		return 0, err
-	}
-	if !res.OK {
-		return 0, errors.New(res.Message)
-	}
-
-	value, ok := res.Result["sensorValue"].(float64)
-	//fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
-	if !ok {
-		return 0, errors.New("unable to extract sensorValue from request result")
-	}
-	sensor.Value = value
-
-	return value, nil
 }
 
 // UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
@@ -461,12 +467,46 @@ func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 	newValue := int(value)
 
 	if newValue != circuit.Consumption {
-		//oldValue := circuit.Consumption
+		oldValue := circuit.Consumption
 		circuit.Consumption = newValue
 		a.Circuits[circuitID] = circuit
-
+		a.dispatchConsumptionValueChange(circuitID, oldValue, newValue)
 	}
 	return newValue, nil
+}
+
+// UpdateOnValue ...
+func (a *Account) UpdateOnValue(device *Device) (bool, error) {
+	return false, errors.New("not implemented yet")
+}
+
+// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
+// the the sensor.
+func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
+	params := make(map[string]string)
+	params["dsid"] = sensor.device.ID
+	params["sensorIndex"] = strconv.Itoa(sensor.Index)
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
+	if err != nil {
+		return 0, err
+	}
+	if !res.OK {
+		return 0, errors.New(res.Message)
+	}
+
+	value, ok := res.Result["sensorValue"].(float64)
+	//fmt.Printf("sensor "+sensor.device.DisplayID+".%d = %f\r\n", sensor.Index, value)
+	if !ok {
+		return 0, errors.New("unable to extract sensorValue from request result")
+	}
+
+	if sensor.Value != value {
+		oldValue := sensor.Value
+		sensor.Value = value
+		a.dispatchSensorValueChange(sensor.device.DisplayID, sensor.Index, oldValue, value)
+	}
+
+	return value, nil
 }
 
 // SetStructure assigns a structure to the account, maps will be build and cross references assigned.
@@ -532,6 +572,45 @@ func (a *Account) setUpdateTimeStamp(id string) {
 	a.pollingHelpers.mapMutex.Unlock()
 }
 
+func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int, newValue int) {
+	a.eventHelpers.mapMutex.Lock()
+
+	for id, receiver := range a.eventHelpers.valueChangeReceiver {
+		logger.Info(fmt.Sprintf("calling %s.OnConsumptionValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
+		go receiver.OnCircuitConsumptionValueChange(circuitID, oldValue, newValue)
+	}
+	a.eventHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newValue int) {
+	a.eventHelpers.mapMutex.Lock()
+
+	for id, receiver := range a.eventHelpers.valueChangeReceiver {
+		logger.Info(fmt.Sprintf("calling %s.OnMeterValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
+		go receiver.OnCircuitMeterValueChange(circuitID, oldValue, newValue)
+	}
+	a.eventHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) dispatchOutputChannelValueChange(deviceID string, at ApplicationType, oldValue int, newValue int) {
+	a.eventHelpers.mapMutex.Lock()
+	for id, receiver := range a.eventHelpers.valueChangeReceiver {
+		logger.Info(fmt.Sprintf("calling %s.OnOutputChannelValueChange for channel %s.%s (%d -> %d))", id, deviceID, at.GetName(), oldValue, newValue))
+		go receiver.OnOutputChannelValueChange(deviceID, at, oldValue, newValue)
+	}
+	a.eventHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, oldValue float64, newValue float64) {
+	a.eventHelpers.mapMutex.Lock()
+
+	for id, receiver := range a.eventHelpers.valueChangeReceiver {
+		logger.Info(fmt.Sprintf("calling %s.OnSensorValueChange for sensor %s.%d (%f -> %f))", id, deviceID, sensorIndex, oldValue, newValue))
+		go receiver.OnSensorValueChange(deviceID, sensorIndex, oldValue, newValue)
+	}
+	a.eventHelpers.mapMutex.Unlock()
+}
+
 func (a *Account) performUpdate(id string) {
 
 	// independed from update result, set the current timestamp to reset the interval
@@ -541,7 +620,7 @@ func (a *Account) performUpdate(id string) {
 	a.pollingHelpers.activePollingMap[id] = time.Now()
 	a.pollingHelpers.mapMutex.Unlock()
 
-	fmt.Printf("\r\nupdating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls)
+	logger.Info(fmt.Sprintf("updating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls))
 
 	// ids are separated by '.'
 	s := strings.Split(id, ".")

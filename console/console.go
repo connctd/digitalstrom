@@ -53,7 +53,6 @@ func main() {
 
 	// generate new Account instance
 	account := *digitalstrom.NewAccount()
-
 	// evaluate program arguments
 	argsWithoutProg := os.Args[1:]
 	if len(argsWithoutProg) > 0 {
