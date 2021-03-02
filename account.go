@@ -4,10 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	stdlog "log"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 )
 
 // Default polling setup values
@@ -58,6 +63,13 @@ type pollingHelpers struct {
 type eventHelpers struct {
 	valueChangeReceiver map[string]ValueChangeReceiver
 	mapMutex            *sync.Mutex
+}
+
+var logger = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile))
+
+//SetLogger sets a custom logger
+func SetLogger(newLogger logr.Logger) {
+	logger = newLogger.WithName("lib-digitalstrom")
 }
 
 // NewAccount sets connection baseURL to default, generates maps and returns
