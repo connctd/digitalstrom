@@ -233,6 +233,7 @@ const (
 	OCTcoolingCapacity          = OutputChannelType("coolingCapacity")
 	OCTaudioVolume              = OutputChannelType("audioVolume")
 	OCTpowerState               = OutputChannelType("powerState")
+	OCTpowerLevel               = OutputChannelType("powerLevel")
 )
 
 // Application Types
