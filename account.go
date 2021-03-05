@@ -246,20 +246,21 @@ func (a *Account) RequestSystemInfo() (*System, error) {
 }
 
 // ResetPollingIntervals will remove all intervals for sensors,
-// circuits and output channels. This method will stop the
-// automated update method. When StartUpdates() is called, default
-// polling intervals for sensors, circuits and output channels will
-// be set to default.
+// circuits and output channels. When StartPolling() is called, default
+// polling intervals for sensors, circuits and output channels will not
+// be set to default. To set default polling intervals again, call
+// SetDefaultPollingIntervas().
 func (a *Account) ResetPollingIntervals() {
-	//a.StopUpdates() only stop when update routine is running
+	a.pollingHelpers.mapMutex.Lock()
 	a.pollingHelpers.pollIntervalMap = make(map[string]int)
+	a.pollingHelpers.mapMutex.Unlock()
 }
 
-// RunUpdates starts the update routine. It calls the internal prepareUpdates function.
+// StartPolling starts the update routine. It calls the internal prepareUpdates function.
 // When no update intervals are given in advance, a complete list of update intervals will
 // be generated automatically (including all sensors, output channesl and circuits) by using
 // the related default intervals.
-func (a *Account) RunUpdates() {
+func (a *Account) StartPolling() {
 	a.preparePolling()
 	ticker := *time.NewTicker(time.Second)
 	go func() {
