@@ -241,7 +241,7 @@ func updateAll(a *digitalstrom.Account) {
 
 			sensor := a.Devices[i].Sensors[j]
 			fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, sensor.Index, sensor.Type.GetName())
-			value, err := a.UpdateSensorValue(&a.Devices[i].Sensors[j])
+			value, err := a.PollSensorValue(&a.Devices[i].Sensors[j])
 			if err != nil {
 				fmt.Printf("ERROR. %s\r\n", err)
 			} else {
@@ -254,7 +254,7 @@ func updateAll(a *digitalstrom.Account) {
 	fmt.Println("Updating Circuit Values")
 	for i := range a.Circuits {
 		fmt.Printf("   Updating consumption of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
-		value, err := a.UpdateCircuitConsumptionValue(a.Circuits[i].DisplayID)
+		value, err := a.PollCircuitConsumptionValue(a.Circuits[i].DisplayID)
 		if err != nil {
 			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
@@ -262,7 +262,7 @@ func updateAll(a *digitalstrom.Account) {
 		}
 
 		fmt.Printf("   Updating meter value of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
-		value, err = a.UpdateCircuitMeterValue(a.Circuits[i].DisplayID)
+		value, err = a.PollCircuitMeterValue(a.Circuits[i].DisplayID)
 		if err != nil {
 			fmt.Printf("ERROR. %s", err)
 		} else {
@@ -279,10 +279,10 @@ func processAutoUpdateCmd(a *digitalstrom.Account, cmd []string) {
 	}
 	switch cmd[2] {
 	case "on":
-		a.RunUpdates()
+		a.StartPolling()
 		fmt.Println("OK. Updates will be made autonomously.")
 	case "off":
-		a.StopUpdates()
+		a.StopPolling()
 		fmt.Println("OK. Automatic updates are stopped.")
 	default:
 		fmt.Printf("Error. %s is not a valid parameter. Type either 'on' or 'off'.", cmd[2])
@@ -304,7 +304,7 @@ func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
 	for j := range dev.Sensors {
 		sensor := dev.Sensors[j]
 		fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", dev.DisplayID, sensor.Index, sensor.Type.GetName())
-		value, err := a.UpdateSensorValue(&dev.Sensors[j])
+		value, err := a.PollSensorValue(&dev.Sensors[j])
 		if err != nil {
 			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
@@ -326,7 +326,7 @@ func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	val, err := a.UpdateOnValue(&dev)
+	val, err := a.PollOnValue(&dev)
 	if err != nil {
 		fmt.Printf("Error. Unable to update On value for device '%s'.\r\n", cmd[2])
 		fmt.Println(err)
@@ -354,7 +354,7 @@ func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
 
 	for i := range device.Sensors {
 		fmt.Printf("Updating sensor %s.%d ...", cmd[2], i)
-		value, err := a.UpdateSensorValue(&device.Sensors[i])
+		value, err := a.PollSensorValue(&device.Sensors[i])
 		if err != nil {
 			fmt.Printf("ERROR.Unable to update sensor '%d' of device '%s'.\r\n", i, cmd[2])
 			fmt.Println(err)
@@ -384,7 +384,7 @@ func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	_, err = a.UpdateSensorValue(sensor)
+	_, err = a.PollSensorValue(sensor)
 	if err != nil {
 		fmt.Printf("Error. Unable to update sensor '%d' of device '%s'.\r\n", index, cmd[2])
 		fmt.Println(err)
@@ -406,7 +406,7 @@ func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	value, err := a.UpdateCircuitMeterValue(circuit.DisplayID)
+	value, err := a.PollCircuitMeterValue(circuit.DisplayID)
 	if err != nil {
 		fmt.Println("Error")
 		fmt.Println(err)
@@ -426,7 +426,7 @@ func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	value, err := a.UpdateCircuitConsumptionValue(circuit.DisplayID)
+	value, err := a.PollCircuitConsumptionValue(circuit.DisplayID)
 	if err != nil {
 		fmt.Println("Error")
 		fmt.Println(err)

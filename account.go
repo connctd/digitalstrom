@@ -626,15 +626,13 @@ func (a *Account) performPolling(id string) {
 	// ids are separated by '.'
 	s := strings.Split(id, ".")
 
-	if len(s) < 2 {
+	if len(s) != 3 {
+		logger.Info(fmt.Sprintf("WARNING: %s is not a valid valueID", id))
 		return
 	}
 
 	switch s[0] {
 	case "circuit":
-		if len(s) != 2 {
-			return
-		}
 		a.PollCircuitConsumptionValue(s[1])
 		a.PollCircuitMeterValue(s[1])
 
