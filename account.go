@@ -260,21 +260,21 @@ func (a *Account) ResetPollingIntervals() {
 // be generated automatically (including all sensors, output channesl and circuits) by using
 // the related default intervals.
 func (a *Account) RunUpdates() {
-	a.prepareUpdates()
+	a.preparePolling()
 	ticker := *time.NewTicker(time.Second)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
 				for id, interval := range a.pollingHelpers.pollIntervalMap {
-					if a.isUpdateIntervalReached(id, interval) {
+					if a.isPollingIntervalReached(id, interval) {
 						if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
 							a.pollingHelpers.mapMutex.Lock()
 							_, ok := a.pollingHelpers.activePollingMap[id]
 							a.pollingHelpers.mapMutex.Unlock()
 							if !ok {
 								a.pollingHelpers.parallelPollCount++
-								go a.performUpdate(id)
+								go a.performPolling(id)
 							}
 						}
 					}
@@ -292,9 +292,9 @@ func (a *Account) SetApplicationToken(token string) {
 	a.Connection.ApplicationToken = token
 }
 
-// SetDefaultUpdateIntervals is setting for all sensors, channels and circuits
+// SetDefaultPollingIntervals is setting for all sensors, channels and circuits
 // the corresponding default interval. Intervals that were set manually before, will be overwritten.
-func (a *Account) SetDefaultUpdateIntervals() {
+func (a *Account) SetDefaultPollingIntervals() {
 	a.ResetPollingIntervals()
 	for devID, dev := range a.Devices {
 		for i := range dev.Sensors {
@@ -335,19 +335,19 @@ func (a *Account) SetSessionToken(token string) {
 	a.Connection.SessionToken = token
 }
 
-// SetUpdateInterval sets the automatic update interval for the element identified
+// SetPollingInterval sets the automatic polling interval for the element identified
 // by given id. The id is a combination of eighter "sensor.<deviceID>.<sensor index>,
-// channel.<deviceID>.<ChannelType> or circuit.<circuitID>. When setting an update interval,
-// only those elements will be updated, that were added. To set default update intervals for
-// all elements, call SetDefaultUpdateIntervals()
-func (a *Account) SetUpdateInterval(id string, interval int) error {
+// channel.<deviceID>.<ChannelType> or circuit.<circuitID>. When setting an polling interval,
+// only those elements will be polled, that were added. To set default polling intervals for
+// all elements, call SetDefaultPollingIntervals()
+func (a *Account) SetPollingInterval(id string, interval int) error {
 	if a.pollingHelpers.pollIntervalMap == nil {
 		a.pollingHelpers.pollIntervalMap = make(map[string]int)
 	}
 
 	s := strings.Split(id, ".")
 	if len(s) < 2 {
-		return errors.New(id + " is not a valid update element identifier")
+		return errors.New(id + " is not a valid identifier")
 	}
 
 	// ToDo: do better id test (sensor existing, channel existing, circuit existing)
@@ -361,9 +361,9 @@ func (a *Account) SetURL(url string) {
 	a.Connection.BaseURL = url
 }
 
-// StopUpdates stops the autonomous updater. Values will not requested until
+// StopPolling stops the autonomous updater. Values will not requested until
 // updater will be started again
-func (a *Account) StopUpdates() {
+func (a *Account) StopPolling() {
 	a.quitTickerChannel <- true
 }
 
@@ -408,11 +408,11 @@ func (a *Account) UnsubscribeValueChangeReceiver(id string) {
 	a.eventHelpers.mapMutex.Unlock()
 }
 
-// UpdateCircuitMeterValue is performing a getEnergyMeterValue request in order to
+// PollCircuitMeterValue is performing a getEnergyMeterValue request in order to
 // receive the acutal meter value. This value wil be assign to the circuit and additionally
 // returned. In case an error occured during the request, -1 will be return as well as the
 // error itself.
-func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
+func (a *Account) PollCircuitMeterValue(circuitID string) (int, error) {
 	circuit, ok := a.Circuits[circuitID]
 	if !ok {
 		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
@@ -442,10 +442,10 @@ func (a *Account) UpdateCircuitMeterValue(circuitID string) (int, error) {
 	return newValue, nil
 }
 
-// UpdateCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
+// PollCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
 // The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
 // return or an error (when ocurred)
-func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
+func (a *Account) PollCircuitConsumptionValue(circuitID string) (int, error) {
 
 	circuit, ok := a.Circuits[circuitID]
 	if !ok {
@@ -475,14 +475,14 @@ func (a *Account) UpdateCircuitConsumptionValue(circuitID string) (int, error) {
 	return newValue, nil
 }
 
-// UpdateOnValue ...
-func (a *Account) UpdateOnValue(device *Device) (bool, error) {
+// PollOnValue ...
+func (a *Account) PollOnValue(device *Device) (bool, error) {
 	return false, errors.New("not implemented yet")
 }
 
-// UpdateSensorValue is requesting the current value the given sensor has. The value will be assigned
+// PollSensorValue is requesting the current value the given sensor has. The value will be assigned
 // the the sensor.
-func (a *Account) UpdateSensorValue(sensor *Sensor) (float64, error) {
+func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 	params := make(map[string]string)
 	params["dsid"] = sensor.device.ID
 	params["sensorIndex"] = strconv.Itoa(sensor.Index)
@@ -539,10 +539,10 @@ func (a *Account) buildMaps() {
 	}
 }
 
-func (a *Account) prepareUpdates() {
+func (a *Account) preparePolling() {
 	// create a new map to temporarily store the last updates for each value
 	if a.pollingHelpers.pollIntervalMap == nil {
-		a.SetDefaultUpdateIntervals()
+		a.SetDefaultPollingIntervals()
 	}
 	a.pollingHelpers.lastPollMap = make(map[string]time.Time)
 	for key := range a.pollingHelpers.pollIntervalMap {
@@ -551,9 +551,9 @@ func (a *Account) prepareUpdates() {
 	a.pollingHelpers.parallelPollCount = 0
 }
 
-// isUpdateIntervalReached checks whether the value with the given ID
+// isPollingIntervalReached checks whether the value with the given ID
 // needs to be updated.
-func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
+func (a *Account) isPollingIntervalReached(id string, interval int) bool {
 	t, ok := a.pollingHelpers.lastPollMap[id]
 	if !ok {
 		return true
@@ -561,7 +561,7 @@ func (a *Account) isUpdateIntervalReached(id string, interval int) bool {
 	return time.Now().Sub(t).Seconds() > float64(interval)
 }
 
-func (a *Account) setUpdateTimeStamp(id string) {
+func (a *Account) setPollingTimeStamp(id string) {
 	a.pollingHelpers.parallelPollCount--
 	a.pollingHelpers.mapMutex.Lock()
 	a.pollingHelpers.lastPollMap[id] = time.Now()
@@ -611,10 +611,10 @@ func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, ol
 	a.eventHelpers.mapMutex.Unlock()
 }
 
-func (a *Account) performUpdate(id string) {
+func (a *Account) performPolling(id string) {
 
 	// independed from update result, set the current timestamp to reset the interval
-	defer a.setUpdateTimeStamp(id)
+	defer a.setPollingTimeStamp(id)
 	// remember that value with this id will be polled now
 	a.pollingHelpers.mapMutex.Lock()
 	a.pollingHelpers.activePollingMap[id] = time.Now()
@@ -634,8 +634,8 @@ func (a *Account) performUpdate(id string) {
 		if len(s) != 2 {
 			return
 		}
-		a.UpdateCircuitConsumptionValue(s[1])
-		a.UpdateCircuitMeterValue(s[1])
+		a.PollCircuitConsumptionValue(s[1])
+		a.PollCircuitMeterValue(s[1])
 
 	case "sensor":
 		if len(s) != 3 {
@@ -649,7 +649,7 @@ func (a *Account) performUpdate(id string) {
 		if err != nil {
 			return
 		}
-		a.UpdateSensorValue(sensor)
+		a.PollSensorValue(sensor)
 
 	case "channel":
 		// not implemented yet

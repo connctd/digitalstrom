@@ -536,7 +536,7 @@ func processSetMaxCommand(a *digitalstrom.Account, cmd []string) {
 func processSetDefaultCmd(a *digitalstrom.Account, cmd []string) {
 	switch cmd[2] {
 	case "pollingintervals":
-		a.SetDefaultUpdateIntervals()
+		a.SetDefaultPollingIntervals()
 		fmt.Println("OK. All polling intervals are set to default.")
 	case "pollinterval":
 		if len(cmd) != 5 {
@@ -615,7 +615,7 @@ func processSetUpdateIntervalCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("Unknown element id for update interval command: '%s'\r\n", cmd[2])
 		return
 	}
-	err = a.SetUpdateInterval(id, interval)
+	err = a.SetPollingInterval(id, interval)
 	if err != nil {
 		fmt.Printf("Error. Unable to set update interval for %s.\r\n", id)
 		fmt.Println(err)
