@@ -27,7 +27,7 @@ const (
 // faster communication
 type Account struct {
 	Connection Connection
-	structure  Structure
+	Structure  Structure
 	Devices    map[string]Device
 	Groups     map[int]Group
 	Zones      map[int]Zone
@@ -60,6 +60,10 @@ type pollingHelpers struct {
 	mapMutex          *sync.Mutex
 }
 
+// eventHelpers are used to handle async request responses for updating value changes. Requesting values
+// from devices over the api takes several seconds. That is why multiple requests are made simultaneously
+// with the help of gophers.
+// this structure helps to lock maps when async events will be handled
 type eventHelpers struct {
 	valueChangeReceiver map[string]ValueChangeReceiver
 	mapMutex            *sync.Mutex
@@ -77,7 +81,7 @@ func SetLogger(newLogger logr.Logger) {
 func NewAccount() *Account {
 	return &Account{
 		Connection: Connection{
-			BaseURL: DefautBaseURL,
+			BaseURL: defautBaseURL,
 		},
 		Devices:           make(map[string]Device),
 		Groups:            make(map[int]Group),
@@ -125,16 +129,10 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
-// GetStructure returns the structure of the account.
-func (a *Account) GetStructure() *Structure {
-	return &a.structure
-}
-
 // Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
 func (a *Account) Init() error {
 	logger.Info("account initialization")
 	logger.Info("performing application login")
-	logger.Info("irgendein info")
 	err := a.ApplicationLogin()
 	if err != nil {
 		logger.Error(err, "initialisation has been aborted")
@@ -216,13 +214,15 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	jsonString, _ := json.Marshal(res.Result)
 
 	s := Structure{}
-	json.Unmarshal(jsonString, &s)
+	err = json.Unmarshal(jsonString, &s)
 
 	// assign the structure to our account
-	a.setStructure(s)
+	if err != nil {
+		a.setStructure(s)
+	}
 
 	// return the shit
-	return &s, nil
+	return &s, err
 }
 
 // RequestSystemInfo performs a get system/version request and returns the result or
@@ -240,9 +240,9 @@ func (a *Account) RequestSystemInfo() (*System, error) {
 	jsonString, _ := json.Marshal(res.Result)
 
 	s := System{}
-	json.Unmarshal(jsonString, &s)
+	err = json.Unmarshal(jsonString, &s)
 
-	return &s, nil
+	return &s, err
 }
 
 // ResetPollingIntervals will remove all intervals for sensors,
@@ -513,8 +513,8 @@ func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 // SetStructure assigns a structure to the account, maps will be build and cross references assigned.
 // It is highy recommended to use this function in order to assign a structure rather than assign them directly.
 func (a *Account) setStructure(structure Structure) {
-	a.structure = structure
-	a.structure.assignCrossReferences()
+	a.Structure = structure
+	a.Structure.assignCrossReferences()
 	a.buildMaps()
 }
 
@@ -522,20 +522,20 @@ func (a *Account) setStructure(structure Structure) {
 // and floors for fast access. It should be called whenever a structure,
 // circuit or groups are requested
 func (a *Account) buildMaps() {
-	for i := range a.structure.Apartment.Zones {
-		zone := a.structure.Apartment.Zones[i]
+	for i := range a.Structure.Apartment.Zones {
+		zone := a.Structure.Apartment.Zones[i]
 		a.Zones[zone.ID] = zone
-		for j := range a.structure.Apartment.Zones[i].Groups {
-			group := a.structure.Apartment.Zones[i].Groups[j]
+		for j := range a.Structure.Apartment.Zones[i].Groups {
+			group := a.Structure.Apartment.Zones[i].Groups[j]
 			a.Groups[group.ID] = group
 		}
-		for j := range a.structure.Apartment.Zones[i].Devices {
-			device := a.structure.Apartment.Zones[i].Devices[j]
+		for j := range a.Structure.Apartment.Zones[i].Devices {
+			device := a.Structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = device
 		}
 	}
-	for i := range a.structure.Apartment.Floors {
-		floor := a.structure.Apartment.Floors[i]
+	for i := range a.Structure.Apartment.Floors {
+		floor := a.Structure.Apartment.Floors[i]
 		a.Floors[floor.ID] = floor
 	}
 }
@@ -578,7 +578,7 @@ func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int,
 
 	for id, receiver := range a.eventHelpers.valueChangeReceiver {
 		logger.Info(fmt.Sprintf("calling %s.OnConsumptionValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
-		go receiver.OnCircuitConsumptionValueChange(circuitID, oldValue, newValue)
+		go receiver.CircuitConsumptionValueChange(circuitID, oldValue, newValue)
 	}
 	a.eventHelpers.mapMutex.Unlock()
 }
@@ -588,7 +588,7 @@ func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newVa
 
 	for id, receiver := range a.eventHelpers.valueChangeReceiver {
 		logger.Info(fmt.Sprintf("calling %s.OnMeterValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
-		go receiver.OnCircuitMeterValueChange(circuitID, oldValue, newValue)
+		go receiver.CircuitMeterValueChange(circuitID, oldValue, newValue)
 	}
 	a.eventHelpers.mapMutex.Unlock()
 }
@@ -597,7 +597,7 @@ func (a *Account) dispatchOutputChannelValueChange(deviceID string, at Applicati
 	a.eventHelpers.mapMutex.Lock()
 	for id, receiver := range a.eventHelpers.valueChangeReceiver {
 		logger.Info(fmt.Sprintf("calling %s.OnOutputChannelValueChange for channel %s.%s (%d -> %d))", id, deviceID, at.GetName(), oldValue, newValue))
-		go receiver.OnOutputChannelValueChange(deviceID, at, oldValue, newValue)
+		go receiver.OutputChannelValueChange(deviceID, at, oldValue, newValue)
 	}
 	a.eventHelpers.mapMutex.Unlock()
 }
@@ -607,7 +607,7 @@ func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, ol
 
 	for id, receiver := range a.eventHelpers.valueChangeReceiver {
 		logger.Info(fmt.Sprintf("calling %s.OnSensorValueChange for sensor %s.%d (%f -> %f))", id, deviceID, sensorIndex, oldValue, newValue))
-		go receiver.OnSensorValueChange(deviceID, sensorIndex, oldValue, newValue)
+		go receiver.SensorValueChange(deviceID, sensorIndex, oldValue, newValue)
 	}
 	a.eventHelpers.mapMutex.Unlock()
 }

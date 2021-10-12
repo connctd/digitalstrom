@@ -13,8 +13,8 @@ import (
 type requestMethod string
 
 const (
-	// DefautBaseURL Will be set as default Base Url for connections
-	DefautBaseURL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
+	// defautBaseURL Will be set as default Base Url for connections
+	defautBaseURL = "https://192.168.178.178:8080" // TODO: should be exchanged by default dS web API address
 )
 
 // RequestError structure to give a proper error that could occur during
@@ -110,11 +110,11 @@ func (c *Connection) generateHTTPRequest(url string, method requestMethod, body 
 	if c.checkAccessToken() {
 		q.Add("token", c.SessionToken)
 	}
-	if params != nil {
-		for p, v := range params {
-			q.Add(p, v)
-		}
+
+	for p, v := range params {
+		q.Add(p, v)
 	}
+
 	req.URL.RawQuery = q.Encode()
 	return req, nil
 }

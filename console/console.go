@@ -1208,7 +1208,7 @@ func printHelp() {
 
 func printStructure(a *digitalstrom.Account, level int) {
 
-	structure := a.GetStructure()
+	structure := &a.Structure
 
 	if structure == nil {
 		fmt.Println("No Structure available yet. Please request the structure (type 'request structure') or init the account (type 'init').")

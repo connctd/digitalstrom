@@ -3,9 +3,7 @@ package digitalstrom
 import (
 	"encoding/json"
 	"errors"
-	//"errors"
-	//"strconv"
-	//"strings"
+	"fmt"
 )
 
 /*
@@ -31,7 +29,7 @@ type Structure struct {
 	Apartment Apartment `json:"apartment"`
 }
 
-// Apartment is the ogical instance of a digitalSTROM instalation. This includes
+// Apartment is the logical instance of a digitalSTROM installation. This includes
 // all rooms and any device.
 type Apartment struct {
 	Zones  []Zone  `json:"zones"`
@@ -57,7 +55,7 @@ type Floor struct {
 	Zones []int  `json:"zones"`
 }
 
-// Group is the representation of an pplication type
+// Group is the representation of an application type
 type Group struct {
 	ID              int             `json:"id"`
 	Name            string          `json:"name"`
@@ -212,6 +210,32 @@ type BinaryInputType int
 // SensorType ...
 type SensorType int
 
+var binaryInputTypeNames = [...]string{
+	"Generic",
+	"Presence",
+	"Brightness",
+	"Presence",
+	"Twilight",
+	"Motion",
+	"Motion in darkness",
+	"Smoke",
+	"Wind strength above limit",
+	"Rain",
+	"Sun radiation",
+	"Temperature below limit",
+	"Battery status is low",
+	"Window is open",
+	"Door is open",
+	"Window is tilted",
+	"Garage door is open",
+	"Sun protection",
+	"Frost",
+	"Heating system enabled",
+	"Change-over signal",
+	"Initialization",
+	"Malfunction",
+	"Service"}
+
 // Output Channel Types (OTC)
 const (
 	OCTbrightness               = OutputChannelType("brightness")
@@ -328,6 +352,10 @@ const (
 	STduration                         SensorType = 75
 )
 
+func (b BinaryInputType) String() string {
+	return fmt.Sprintf(" %d - %s", b.GetID(), b.GetName())
+}
+
 // GetID returns the id of the binary input type
 func (b BinaryInputType) GetID() int {
 	return int(b)
@@ -335,37 +363,12 @@ func (b BinaryInputType) GetID() int {
 
 // GetName returns the Name of the binary input type
 func (b BinaryInputType) GetName() string {
-	names := [...]string{
-		"Generic",
-		"Presence",
-		"Brightness",
-		"Presence",
-		"Twilight",
-		"Motion",
-		"Motion in darkness",
-		"Smoke",
-		"Wind strength above limit",
-		"Rain",
-		"Sun radiation",
-		"Temperature below limit",
-		"Battery status is low",
-		"Window is open",
-		"Door is open",
-		"Window is tilted",
-		"Garage door is open",
-		"Sun protection",
-		"Frost",
-		"Heating system enabled",
-		"Change-over signal",
-		"Initialization",
-		"Malfunction",
-		"Service"}
 
-	if len(names) < b.GetID() {
+	if len(binaryInputTypeNames) < b.GetID() {
 		return "unknown binary input type"
 	}
 
-	return names[b.GetID()]
+	return binaryInputTypeNames[b.GetID()]
 }
 
 // GetID returns the identifier for the application type
