@@ -218,9 +218,9 @@ func (a *Account) RequestStructure() (*Structure, error) {
 
 	// assign the structure to our account
 	if err != nil {
-		a.setStructure(s)
+		return nil, err
 	}
-
+	a.setStructure(s)
 	// return the shit
 	return &s, err
 }
@@ -626,13 +626,12 @@ func (a *Account) performPolling(id string) {
 	// ids are separated by '.'
 	s := strings.Split(id, ".")
 
-	if len(s) != 3 {
-		logger.Info(fmt.Sprintf("WARNING: %s is not a valid valueID", id))
-		return
-	}
-
 	switch s[0] {
 	case "circuit":
+		if len(s) != 2 {
+			logger.Info(fmt.Sprintf("WARNING: %s is not a valid curcuitID ", id))
+			return
+		}
 		a.PollCircuitConsumptionValue(s[1])
 		a.PollCircuitMeterValue(s[1])
 

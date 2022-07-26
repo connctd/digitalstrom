@@ -5,14 +5,15 @@ one in order control devices or receive their sensor data.
 
 # How to use
 
+## Local access
+
 ### Create new account instance
 
     account := *digitalstrom.NewAccount()
 
 ### Register an Application
 
-To avoid a handling with ``userName`` and ``password``, each app could register at the dS server in order to receive an application token. This token will be used to perform an application login. This library requires the application token in order to work. Only register an application once. The
-application token stays valid until the user deletes the access rights manually at the dS server side. 
+To avoid a handling with ``userName`` and ``password``, each app could register at the dS server in order to receive an application token. This token will be used to perform an application login. This library requires the application token in order to work. Register an application only once. The application token stays valid until the user deletes the access rights manually at the dS server side. 
 
     token, err := account.RegisterApplication("username","userpassw","application name")
 
@@ -32,4 +33,5 @@ After a successful login, the complete structure and circuits will be requested.
     err := account.Init()
 
 
-### 
+# Documentation
+

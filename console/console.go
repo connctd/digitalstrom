@@ -229,6 +229,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		updateAll(a)
 	case "auto":
 		processAutoUpdateCmd(a, cmd)
+	case "channel":
+		fmt.Println("Error, updating channel is not implemented yet")
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -625,7 +627,7 @@ func processSetUpdateIntervalCmd(a *digitalstrom.Account, cmd []string) {
 }
 
 func processCmdCommand(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) != 1 {
+	if len(cmd) <= 1 {
 		fmt.Println("\r\rError. Not a valid command. Type 'help' for complete command descriptions.")
 		return
 	}
@@ -1144,7 +1146,7 @@ func printWelcomeMsg() {
 	fmt.Println("        \\__,_/_/\\__, /_/\\__/\\__,_/_//____//_/ /_/ |_|\\____/_/  /_/  /_/_/_.___/_/   \\__,_/_/   \\__, /  ")
 	fmt.Println("               /____/                                                                         /____/   ")
 	fmt.Println("===================================================================================================================")
-	fmt.Println("                                                                           powered by IoT connctd - " + "\033[1;37m" + "www.connctd.com\033[0m")
+	fmt.Println("                                                                           powered by IoT CONNCTD - " + "\033[1;37m" + "www.connctd.com\033[0m")
 	fmt.Println()
 
 }
