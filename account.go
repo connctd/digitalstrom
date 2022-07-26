@@ -129,6 +129,19 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
+//GetOutputChannel Returning the output channel with die index ID <channelIndex> of device with display ID <deviceID> or nil when either
+// device with the given ID couldn't be found or the OutputChannel index is higher than the amount of channels the device has
+func (a *Account) GetOutputChannel(deviceID string, channelIndex int) (*OutputChannel, error) {
+	device, ok := a.Devices[deviceID]
+	if !ok {
+		return nil, errors.New("no device with id '" + deviceID + "' found")
+	}
+	if channelIndex >= len(device.OutputChannels) {
+		return nil, errors.New("channelIndex " + strconv.Itoa(channelIndex) + " out of range for device " + deviceID)
+	}
+	return &device.OutputChannels[channelIndex], nil
+}
+
 // Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
 func (a *Account) Init() error {
 	logger.Info("account initialization")
@@ -139,16 +152,21 @@ func (a *Account) Init() error {
 		return err
 	}
 	logger.Info("requesting complete structure")
-	_, err = a.RequestStructure()
+	s, err := a.RequestStructure()
 	if err != nil {
 		logger.Error(err, "initialisation has been aborted")
 		return err
 	}
+	a.setStructure(*s)
 	logger.Info("requesting circuits")
-	_, err = a.RequestCircuits()
+	circuits, err := a.RequestCircuits()
 	if err != nil {
 		logger.Error(err, "initialisation has been aborted")
 		return err
+	}
+	// fill the circuit map for fast access
+	for i := range circuits {
+		a.Circuits[circuits[i].DisplayID] = circuits[i]
 	}
 	logger.Info("account successfully initialized")
 	return nil
@@ -163,7 +181,7 @@ func (a *Account) RegisterApplication(applicationName string, username string, p
 }
 
 // RequestCircuits performs a getCircuits request. The received circuit array
-// will be assigned to the account object and additionally returned or the error
+// has to be assigned to the account separately
 //
 func (a *Account) RequestCircuits() ([]Circuit, error) {
 	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getCircuits")
@@ -189,17 +207,11 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 		return nil, err
 	}
 
-	// fill the circuit map for fast access
-	for i := range circuits {
-		a.Circuits[circuits[i].DisplayID] = circuits[i]
-	}
 	// there we are, return everything
 	return circuits, nil
 }
 
-// RequestStructure performs a getStructure request. The complete Structure will be assigned
-// to the account automatically when request was sucessfull, otherwise the occured error will
-// be returned.
+// RequestStructure performs a getStructure request and returns it or an error that might have been occured.
 func (a *Account) RequestStructure() (*Structure, error) {
 
 	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getStructure")
@@ -220,7 +232,6 @@ func (a *Account) RequestStructure() (*Structure, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.setStructure(s)
 	// return the shit
 	return &s, err
 }
@@ -303,9 +314,10 @@ func (a *Account) SetDefaultPollingIntervals() {
 			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultSensorsPollingInterval
 		}
 		for i := range dev.OutputChannels {
-			id := "channel." + devID + "." + dev.OutputChannels[i].ChannelID
+			id := "channel." + devID + "." + strconv.Itoa(i)
 			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultChannelsPollingInterval
 		}
+
 	}
 	for circuitID := range a.Circuits {
 		a.pollingHelpers.pollIntervalMap["circuit."+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
@@ -476,8 +488,38 @@ func (a *Account) PollCircuitConsumptionValue(circuitID string) (int, error) {
 	return newValue, nil
 }
 
+// PollOnValues ...
+func (a *Account) PollOnValues() error {
+	s, err := a.RequestStructure()
+	if err != nil {
+		return err
+	}
+	for i := range s.Apartment.Zones {
+		zone := s.Apartment.Zones[i]
+		for n := range zone.Devices {
+			device := zone.Devices[n]
+			if (device.IsPresent) && (device.IsValid) {
+
+				ad, ok := a.Devices[device.DisplayID]
+				if ok {
+					if ad.On != device.On {
+						//oldval := ad.On
+
+						fmt.Printf(" device %s.on = %t -> %t\n", device.DisplayID, ad.On, device.On)
+						ad.On = device.On
+						a.Devices[device.DisplayID] = ad
+						// TODO: dispatch on value change a.dis
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // PollOnValue ...
 func (a *Account) PollOnValue(device *Device) (bool, error) {
+
 	return false, errors.New("not implemented yet")
 }
 
@@ -508,6 +550,33 @@ func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 	}
 
 	return value, nil
+}
+
+func (a *Account) PollChannelValue(channel *OutputChannel) (int, error) {
+	params := make(map[string]string)
+	params["dsid"] = channel.device.ID
+	params["offset"] = strconv.Itoa(channel.ChannelIndex)
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getOutputValue", get, "", params)
+	if err != nil {
+		return 0, err
+	}
+	if !res.OK {
+		return 0, errors.New(res.Message)
+	}
+
+	value, ok := res.Result["value"].(float64)
+	if !ok {
+		return 0, errors.New("unable to extract channel output value from request result")
+	}
+
+	int_value := int(value)
+	if channel.Value != int_value {
+		//oldValue := channel.Value
+		channel.Value = int_value
+		// TODO dispatch change a.dispatchOutputChannelValueChange(channel.device.ID, channel.ChannelType, oldValue,value)
+	}
+
+	return int_value, nil
 }
 
 // SetStructure assigns a structure to the account, maps will be build and cross references assigned.
@@ -650,7 +719,18 @@ func (a *Account) performPolling(id string) {
 		a.PollSensorValue(sensor)
 
 	case "channel":
-		// not implemented yet
+		if len(s) != 3 {
+			return
+		}
+		number, err := strconv.Atoi(s[2])
+		if err != nil {
+			return
+		}
+		channel, err := a.GetOutputChannel(s[1], number)
+		if err != nil {
+			return
+		}
+		a.PollChannelValue(channel)
 
 		return
 	default:

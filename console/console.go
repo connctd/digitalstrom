@@ -230,7 +230,7 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 	case "auto":
 		processAutoUpdateCmd(a, cmd)
 	case "channel":
-		fmt.Println("Error, updating channel is not implemented yet")
+		processUpdateChannelCmd(a, cmd)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -248,6 +248,22 @@ func updateAll(a *digitalstrom.Account) {
 				fmt.Printf("ERROR. %s\r\n", err)
 			} else {
 				fmt.Printf("OK. value = %f\r\n", value)
+			}
+
+		}
+	}
+	fmt.Println()
+	fmt.Println("Updating OutputChannel Values")
+	for i := range a.Devices {
+		for j := range a.Devices[i].OutputChannels {
+
+			channel := a.Devices[i].OutputChannels[j]
+			fmt.Printf("   Updating output channel value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, channel.ChannelIndex, channel.ChannelName)
+			value, err := a.PollChannelValue(&a.Devices[i].OutputChannels[j])
+			if err != nil {
+				fmt.Printf("ERROR. %s\r\n", err)
+			} else {
+				fmt.Printf("OK. value = %d\r\n", value)
 			}
 
 		}
@@ -317,30 +333,13 @@ func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
 }
 
 func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) != 3 {
-		fmt.Println("Error. Bad update on command. use -> update on <deviceDisplayID>")
-		return
-	}
 
-	dev, ok := a.Devices[cmd[2]]
-	if !ok {
-		fmt.Printf("Error. Device with id '%s' not found.\r\n", cmd[2])
-		return
-	}
-
-	val, err := a.PollOnValue(&dev)
+	err := a.PollOnValues()
 	if err != nil {
-		fmt.Printf("Error. Unable to update On value for device '%s'.\r\n", cmd[2])
+		fmt.Printf("Error. Unable to update On values '%s'.\r\n", cmd[2])
 		fmt.Println(err)
 		return
 	}
-
-	if val {
-		fmt.Println("Device is ON")
-	} else {
-		fmt.Println("Device is OFF")
-	}
-
 }
 
 func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
@@ -365,6 +364,36 @@ func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("OK. Value = %f\r\n", value)
 	}
 	fmt.Println()
+}
+func processUpdateChannelCmd(a *digitalstrom.Account, cmd []string) {
+
+	if len(cmd) != 4 {
+		fmt.Println("Error. Bad update channel command. use -> update channel <deviceDisplayID> <channelIndex>")
+		return
+	}
+
+	deviceID := cmd[2]
+	channelIndex, err := strconv.Atoi(cmd[3])
+
+	if err != nil {
+		fmt.Printf("\n\rError. '%s' is not a number. Parameter <channelIndex> shall be a number.\r\n", cmd[3])
+		return
+	}
+
+	channel, err := a.GetOutputChannel(deviceID, channelIndex)
+	if err != nil {
+		fmt.Println("Error, unable to update output channel value. Output channel not found.")
+		fmt.Println(err)
+		return
+	}
+
+	_, err = a.PollChannelValue(channel)
+	if err != nil {
+		fmt.Printf("Error. Unable to update channel '%d' of device '%s'.\r\n", channelIndex, deviceID)
+		fmt.Println(err)
+		return
+	}
+	fmt.Printf("Sensor updated. New value = %.2d\r\n", channel.Value)
 }
 
 func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
@@ -1202,7 +1231,7 @@ func printHelp() {
 	fmt.Println("                 channel <deviceID> <channelType>")
 	fmt.Println("                 consumption <circuitID>")
 	fmt.Println("                 meter <circuitID>")
-	fmt.Println("                 on <deviceID>")
+	fmt.Println("                 on")
 	fmt.Println("                 sensor <deviceID> <sensorIndex>")
 	fmt.Println("                 sensors <deviceID>")
 
