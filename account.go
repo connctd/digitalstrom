@@ -571,9 +571,9 @@ func (a *Account) PollChannelValue(channel *OutputChannel) (int, error) {
 
 	int_value := int(value)
 	if channel.Value != int_value {
-		//oldValue := channel.Value
+		oldValue := channel.Value
 		channel.Value = int_value
-		// TODO dispatch change a.dispatchOutputChannelValueChange(channel.device.ID, channel.ChannelType, oldValue,value)
+		a.dispatchOutputChannelValueChange(channel.device.ID, channel.ChannelIndex, oldValue, int_value)
 	}
 
 	return int_value, nil
@@ -662,11 +662,11 @@ func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newVa
 	a.eventHelpers.mapMutex.Unlock()
 }
 
-func (a *Account) dispatchOutputChannelValueChange(deviceID string, at ApplicationType, oldValue int, newValue int) {
+func (a *Account) dispatchOutputChannelValueChange(deviceID string, channelIndex int, oldValue int, newValue int) {
 	a.eventHelpers.mapMutex.Lock()
 	for id, receiver := range a.eventHelpers.valueChangeReceiver {
-		logger.Info(fmt.Sprintf("calling %s.OnOutputChannelValueChange for channel %s.%s (%d -> %d))", id, deviceID, at.GetName(), oldValue, newValue))
-		go receiver.OutputChannelValueChange(deviceID, at, oldValue, newValue)
+		logger.Info(fmt.Sprintf("calling %s.OnOutputChannelValueChange for channel %s.%d (%d -> %d))", id, deviceID, channelIndex, oldValue, newValue))
+		go receiver.OutputChannelValueChange(deviceID, channelIndex, oldValue, newValue)
 	}
 	a.eventHelpers.mapMutex.Unlock()
 }
