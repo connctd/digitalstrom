@@ -1,7 +1,6 @@
 # digitalSTROM
 
-digitalSTROM (dS) connects electrical devices via the existing power line and enables the implementation of control and regulation tasks. This library connects either to the local ds-Server API or to the cloud 
-one in order control devices or receive their sensor data. 
+digitalSTROM (dS) connects electrical devices via the existing power line and enables the implementation of control and regulation tasks. This library connects either to the local ds-Server JSON-API or via Kitepage link in order to control devices or receive their sensor data. 
 
 # How to use
 
@@ -10,6 +9,10 @@ one in order control devices or receive their sensor data.
 ### Create new account instance
 
     account := *digitalstrom.NewAccount()
+
+### Set URL
+
+    account.SetURL("local or pagekite link including protocol and port")
 
 ### Register an Application
 
@@ -26,12 +29,9 @@ To avoid a handling with ``userName`` and ``password``, each app could register 
 ### Inititialization
 
 The initialization processes several tasks. An application login will be performed in order
-to receive the session token. This token will kept in memory and used for future requests.
-After a successful login, the complete structure and circuits will be requested. 
+to receive the ``session token``. This token will kept in memory and used for future requests.
+After a successful login, the complete structure and circuits will be requested. The ``session token```
+will be refreshed automatically.
 
 
     err := account.Init()
-
-
-# Documentation
-

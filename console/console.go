@@ -231,6 +231,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processAutoUpdateCmd(a, cmd)
 	case "channel":
 		processUpdateChannelCmd(a, cmd)
+	case "channels":
+		processUpdateChannelsCmd(a, cmd)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -284,7 +286,7 @@ func updateAll(a *digitalstrom.Account) {
 		if err != nil {
 			fmt.Printf("ERROR. %s", err)
 		} else {
-			fmt.Printf("OK. value = %d Ws", value)
+			fmt.Printf("OK. value = %d Ws\r\n", value)
 		}
 	}
 	fmt.Println()
@@ -365,6 +367,33 @@ func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
 	}
 	fmt.Println()
 }
+
+func processUpdateChannelsCmd(a *digitalstrom.Account, cmd []string) {
+
+	if len(cmd) != 3 {
+		fmt.Println("Error. Bad update channel command. use -> update channels <deviceDisplayID>")
+		return
+	}
+
+	dev, ok := a.Devices[cmd[2]]
+
+	if !ok {
+		fmt.Printf("Error. Unable to find device with displayId '%s'\r\n", cmd[2])
+		return
+	}
+
+	for i := range dev.OutputChannels {
+		fmt.Printf("   Updating output channel value for '%s.%d - %s' ... ", cmd[2], i, dev.OutputChannels[i].ChannelName)
+		value, err := a.PollChannelValue(&dev.OutputChannels[i])
+		if err != nil {
+			fmt.Printf("ERROR. %s\r\n", err)
+		} else {
+			fmt.Printf("OK. value = %d\r\n", value)
+		}
+
+	}
+}
+
 func processUpdateChannelCmd(a *digitalstrom.Account, cmd []string) {
 
 	if len(cmd) != 4 {
@@ -393,7 +422,7 @@ func processUpdateChannelCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Sensor updated. New value = %.2d\r\n", channel.Value)
+	fmt.Printf("Channel updated. New value = %.2d\r\n", channel.Value)
 }
 
 func processUpdateSensorCmd(a *digitalstrom.Account, cmd []string) {
@@ -1229,6 +1258,7 @@ func printHelp() {
 	fmt.Println("          update all")
 	fmt.Println("                 auto <on|off>")
 	fmt.Println("                 channel <deviceID> <channelType>")
+	fmt.Println("                 channels <deviceID>")
 	fmt.Println("                 consumption <circuitID>")
 	fmt.Println("                 meter <circuitID>")
 	fmt.Println("                 on")

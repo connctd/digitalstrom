@@ -310,17 +310,17 @@ func (a *Account) SetDefaultPollingIntervals() {
 	a.ResetPollingIntervals()
 	for devID, dev := range a.Devices {
 		for i := range dev.Sensors {
-			id := "sensor." + devID + "." + strconv.Itoa(i)
+			id := "sensor•" + devID + "•" + strconv.Itoa(i)
 			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultSensorsPollingInterval
 		}
 		for i := range dev.OutputChannels {
-			id := "channel." + devID + "." + strconv.Itoa(i)
+			id := "channel•" + devID + "•" + strconv.Itoa(i)
 			a.pollingHelpers.pollIntervalMap[id] = a.PollingSetup.DefaultChannelsPollingInterval
 		}
 
 	}
 	for circuitID := range a.Circuits {
-		a.pollingHelpers.pollIntervalMap["circuit."+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
+		a.pollingHelpers.pollIntervalMap["circuit•"+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
 	}
 }
 
@@ -358,7 +358,7 @@ func (a *Account) SetPollingInterval(id string, interval int) error {
 		a.pollingHelpers.pollIntervalMap = make(map[string]int)
 	}
 
-	s := strings.Split(id, ".")
+	s := strings.Split(id, "•")
 	if len(s) < 2 {
 		return errors.New(id + " is not a valid identifier")
 	}
@@ -693,7 +693,7 @@ func (a *Account) performPolling(id string) {
 	logger.Info(fmt.Sprintf("updating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls))
 
 	// ids are separated by '.'
-	s := strings.Split(id, ".")
+	s := strings.Split(id, "•")
 
 	switch s[0] {
 	case "circuit":
