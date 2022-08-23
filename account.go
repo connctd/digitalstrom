@@ -17,10 +17,11 @@ import (
 
 // Default polling setup values
 const (
-	defaultSensorPollingInterval  = 30
-	defaultCircuitPollingInterval = 5
-	defaultChannelPollingInterval = 30
-	defaultMaxSimultanousPolls    = 10
+	defaultSensorPollingInterval    = 300
+	defaultCircuitPollingInterval   = 15
+	defaultChannelPollingInterval   = 300
+	defaultStructurePollingInterval = 30
+	defaultMaxSimultanousPolls      = 10
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -28,11 +29,11 @@ const (
 type Account struct {
 	Connection Connection
 	Structure  Structure
-	Devices    map[string]Device
-	Groups     map[int]Group
-	Zones      map[int]Zone
-	Floors     map[int]Floor
-	Circuits   map[string]Circuit
+	Devices    map[string]*Device
+	Groups     map[int]*Group
+	Zones      map[int]*Zone
+	Floors     map[int]*Floor
+	Circuits   map[string]*Circuit
 	//Scenes     map[string]Scene
 
 	// updating
@@ -41,15 +42,24 @@ type Account struct {
 	quitTickerChannel chan bool
 
 	// events
-	eventHelpers eventHelpers
+	Events EventChannels
 }
 
 // PollingSetup defines update settings for automated value polling
 type PollingSetup struct {
-	DefaultCircuitsPollingInterval int `json:"default_circuit_polling_interval"`
-	DefaultSensorsPollingInterval  int `json:"default_sensors_polling_interval"`
-	DefaultChannelsPollingInterval int `json:"default_channels_polling_interval"`
-	MaxParallelPolls               int `json:"max_parallel_polls"`
+	DefaultCircuitsPollingInterval  int `json:"default_circuit_polling_interval"`
+	DefaultSensorsPollingInterval   int `json:"default_sensors_polling_interval"`
+	DefaultChannelsPollingInterval  int `json:"default_channels_polling_interval"`
+	DefaultStructurePollingInterval int `json:"default_on_value_polling_interval"`
+	MaxParallelPolls                int `json:"max_parallel_polls"`
+}
+
+type EventChannels struct {
+	SensorValueChanged             chan<- SensorValueChangeEvent
+	ChannelValueChanged            chan<- ChannelValueChangeEvent
+	CircuitMeterValueChanged       chan<- CircuitMeterValueChangeEvent
+	CircuitConsumptionValueChanged chan<- CircuitConsumptionValueChangeEvent
+	OnStateValueChanged            chan<- OnStateValueChangeEvent
 }
 
 type pollingHelpers struct {
@@ -58,15 +68,6 @@ type pollingHelpers struct {
 	lastPollMap       map[string]time.Time
 	activePollingMap  map[string]time.Time
 	mapMutex          *sync.Mutex
-}
-
-// eventHelpers are used to handle async request responses for updating value changes. Requesting values
-// from devices over the api takes several seconds. That is why multiple requests are made simultaneously
-// with the help of gophers.
-// this structure helps to lock maps when async events will be handled
-type eventHelpers struct {
-	valueChangeReceiver map[string]ValueChangeReceiver
-	mapMutex            *sync.Mutex
 }
 
 var logger = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile))
@@ -83,17 +84,18 @@ func NewAccount() *Account {
 		Connection: Connection{
 			BaseURL: defautBaseURL,
 		},
-		Devices:           make(map[string]Device),
-		Groups:            make(map[int]Group),
-		Zones:             make(map[int]Zone),
-		Floors:            make(map[int]Floor),
-		Circuits:          make(map[string]Circuit),
+		Devices:           make(map[string]*Device),
+		Groups:            make(map[int]*Group),
+		Zones:             make(map[int]*Zone),
+		Floors:            make(map[int]*Floor),
+		Circuits:          make(map[string]*Circuit),
 		quitTickerChannel: make(chan bool),
 		PollingSetup: PollingSetup{
-			DefaultCircuitsPollingInterval: defaultCircuitPollingInterval,
-			DefaultChannelsPollingInterval: defaultChannelPollingInterval,
-			DefaultSensorsPollingInterval:  defaultSensorPollingInterval,
-			MaxParallelPolls:               defaultMaxSimultanousPolls,
+			DefaultCircuitsPollingInterval:  defaultCircuitPollingInterval,
+			DefaultChannelsPollingInterval:  defaultChannelPollingInterval,
+			DefaultSensorsPollingInterval:   defaultSensorPollingInterval,
+			DefaultStructurePollingInterval: defaultStructurePollingInterval,
+			MaxParallelPolls:                defaultMaxSimultanousPolls,
 		},
 		pollingHelpers: pollingHelpers{
 			parallelPollCount: 0,
@@ -102,9 +104,11 @@ func NewAccount() *Account {
 			lastPollMap:       make(map[string]time.Time),
 			mapMutex:          &sync.Mutex{},
 		},
-		eventHelpers: eventHelpers{
-			valueChangeReceiver: make(map[string]ValueChangeReceiver),
-			mapMutex:            &sync.Mutex{},
+		Events: EventChannels{
+			//	ChannelValueChanged:            make(chan ChannelValueChangeEvent),
+			//		SensorValueChanged:             make(chan SensorValueChangeEvent),
+			//		CircuitMeterValueChanged:       make(chan CircuitMeterValueChangeEvent),
+			//		CircuitConsumptionValueChanged: make(chan CircuitConsumptionValueChangeEvent, 5),
 		},
 	}
 
@@ -166,7 +170,7 @@ func (a *Account) Init() error {
 	}
 	// fill the circuit map for fast access
 	for i := range circuits {
-		a.Circuits[circuits[i].DisplayID] = circuits[i]
+		a.Circuits[circuits[i].DisplayID] = &circuits[i]
 	}
 	logger.Info("account successfully initialized")
 	return nil
@@ -322,12 +326,14 @@ func (a *Account) SetDefaultPollingIntervals() {
 	for circuitID := range a.Circuits {
 		a.pollingHelpers.pollIntervalMap["circuit•"+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
 	}
+	a.pollingHelpers.pollIntervalMap["structure"] = a.PollingSetup.DefaultStructurePollingInterval
+
 }
 
 // SetOutputChannelValue sets the value for the given OutputChannel. Returns error
 func (a *Account) SetOutputChannelValue(channel *OutputChannel, value string) error {
 	params := make(map[string]string)
-	params["dsid"] = channel.device.ID
+	params["dsuid"] = channel.device.UUID
 	params["channelvalues"] = string(channel.ChannelType) + "=" + value
 
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/setOutputChannelValue", get, "", params)
@@ -358,7 +364,7 @@ func (a *Account) SetPollingInterval(id string, interval int) error {
 		a.pollingHelpers.pollIntervalMap = make(map[string]int)
 	}
 
-	s := strings.Split(id, "•")
+	s := strings.Split(id, "list")
 	if len(s) < 2 {
 		return errors.New(id + " is not a valid identifier")
 	}
@@ -380,18 +386,6 @@ func (a *Account) StopPolling() {
 	a.quitTickerChannel <- true
 }
 
-// SubsribeValueChangeReceiver adds a pointer to a ValueChangeReceiver with the given id. Everytime a value of a sensor, circuit or
-// output channel changes, the corresponding callback function of the receiver will be called
-func (a *Account) SubsribeValueChangeReceiver(id string, receiver ValueChangeReceiver) {
-	if receiver == nil {
-		return
-	}
-	a.eventHelpers.mapMutex.Lock()
-	logger.Info(fmt.Sprintf("receiver %s added to value change receiver map (mapsize = %d)", id, len(a.eventHelpers.valueChangeReceiver)))
-	a.eventHelpers.valueChangeReceiver[id] = receiver
-	a.eventHelpers.mapMutex.Unlock()
-}
-
 // TurnOn sends eithe a turnOn or turnOff request for the given 'device', depending on value of paramter 'on'
 func (a *Account) TurnOn(device *Device, on bool) error {
 
@@ -402,7 +396,7 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 		url = "/json/device/turnOff"
 	}
 
-	res, err := a.Connection.Request(a.Connection.BaseURL+url, get, "", map[string]string{"dsid": device.ID})
+	res, err := a.Connection.Request(a.Connection.BaseURL+url, get, "", map[string]string{"dsuid": device.UUID})
 	if err != nil {
 		return err
 	}
@@ -414,22 +408,11 @@ func (a *Account) TurnOn(device *Device, on bool) error {
 	return nil
 }
 
-// UnsubscribeValueChangeReceiver removes an event channel.
-func (a *Account) UnsubscribeValueChangeReceiver(id string) {
-	a.eventHelpers.mapMutex.Lock()
-	delete(a.eventHelpers.valueChangeReceiver, id)
-	a.eventHelpers.mapMutex.Unlock()
-}
-
 // PollCircuitMeterValue is performing a getEnergyMeterValue request in order to
 // receive the acutal meter value. This value wil be assign to the circuit and additionally
 // returned. In case an error occured during the request, -1 will be return as well as the
 // error itself.
-func (a *Account) PollCircuitMeterValue(circuitID string) (int, error) {
-	circuit, ok := a.Circuits[circuitID]
-	if !ok {
-		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
-	}
+func (a *Account) PollCircuitMeterValue(circuit *Circuit) (int, error) {
 
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getEnergyMeterValue", get, "", map[string]string{"dsuid": circuit.DSUID})
 	if err != nil {
@@ -448,8 +431,8 @@ func (a *Account) PollCircuitMeterValue(circuitID string) (int, error) {
 	if newValue != circuit.MeterValue {
 		oldValue := circuit.MeterValue
 		circuit.MeterValue = newValue
-		a.Circuits[circuitID] = circuit
-		a.dispatchMeterValueChange(circuitID, oldValue, newValue)
+
+		a.dispatchMeterValueChange(circuit.DisplayID, oldValue, newValue)
 	}
 
 	return newValue, nil
@@ -458,12 +441,7 @@ func (a *Account) PollCircuitMeterValue(circuitID string) (int, error) {
 // PollCircuitConsumptionValue is performing a getconsumption request for the circuit with the given display ID.
 // The requested value will be assigned to the circuit object automatically. Additionally the requested Value will be
 // return or an error (when ocurred)
-func (a *Account) PollCircuitConsumptionValue(circuitID string) (int, error) {
-
-	circuit, ok := a.Circuits[circuitID]
-	if !ok {
-		return -1, errors.New("no circuit with display id '" + circuitID + "' found")
-	}
+func (a *Account) PollCircuitConsumptionValue(circuit *Circuit) (int, error) {
 
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/circuit/getConsumption", get, "", map[string]string{"dsuid": circuit.DSUID})
 	if err != nil {
@@ -482,14 +460,13 @@ func (a *Account) PollCircuitConsumptionValue(circuitID string) (int, error) {
 	if newValue != circuit.Consumption {
 		oldValue := circuit.Consumption
 		circuit.Consumption = newValue
-		a.Circuits[circuitID] = circuit
-		a.dispatchConsumptionValueChange(circuitID, oldValue, newValue)
+		a.dispatchConsumptionValueChange(circuit.DisplayID, oldValue, newValue)
 	}
 	return newValue, nil
 }
 
 // PollOnValues ...
-func (a *Account) PollOnValues() error {
+func (a *Account) PollStructureValues() error {
 	s, err := a.RequestStructure()
 	if err != nil {
 		return err
@@ -503,12 +480,13 @@ func (a *Account) PollOnValues() error {
 				ad, ok := a.Devices[device.DisplayID]
 				if ok {
 					if ad.On != device.On {
-						//oldval := ad.On
-
-						fmt.Printf(" device %s.on = %t -> %t\n", device.DisplayID, ad.On, device.On)
+						oldval := ad.On
 						ad.On = device.On
-						a.Devices[device.DisplayID] = ad
-						// TODO: dispatch on value change a.dis
+
+						a.dispatchOnValueChange(device.DisplayID, oldval, ad.On)
+
+						ad.IsPresent = device.IsPresent
+						ad.IsValid = device.IsValid
 					}
 				}
 			}
@@ -517,17 +495,15 @@ func (a *Account) PollOnValues() error {
 	return nil
 }
 
-// PollOnValue ...
-func (a *Account) PollOnValue(device *Device) (bool, error) {
-
-	return false, errors.New("not implemented yet")
-}
-
 // PollSensorValue is requesting the current value the given sensor has. The value will be assigned
 // the the sensor.
 func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 	params := make(map[string]string)
-	params["dsid"] = sensor.device.ID
+	if len(sensor.device.ID) > 0 {
+		params["dsid"] = sensor.device.ID
+	} else {
+		params["dsuid"] = sensor.device.UUID
+	}
 	params["sensorIndex"] = strconv.Itoa(sensor.Index)
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getSensorValue", get, "", params)
 	if err != nil {
@@ -554,7 +530,7 @@ func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 
 func (a *Account) PollChannelValue(channel *OutputChannel) (int, error) {
 	params := make(map[string]string)
-	params["dsid"] = channel.device.ID
+	params["dsuid"] = channel.device.UUID
 	params["offset"] = strconv.Itoa(channel.ChannelIndex)
 	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/device/getOutputValue", get, "", params)
 	if err != nil {
@@ -593,19 +569,19 @@ func (a *Account) setStructure(structure Structure) {
 func (a *Account) buildMaps() {
 	for i := range a.Structure.Apartment.Zones {
 		zone := a.Structure.Apartment.Zones[i]
-		a.Zones[zone.ID] = zone
+		a.Zones[zone.ID] = &zone
 		for j := range a.Structure.Apartment.Zones[i].Groups {
 			group := a.Structure.Apartment.Zones[i].Groups[j]
-			a.Groups[group.ID] = group
+			a.Groups[group.ID] = &group
 		}
 		for j := range a.Structure.Apartment.Zones[i].Devices {
 			device := a.Structure.Apartment.Zones[i].Devices[j]
-			a.Devices[device.DisplayID] = device
+			a.Devices[device.DisplayID] = &device
 		}
 	}
 	for i := range a.Structure.Apartment.Floors {
 		floor := a.Structure.Apartment.Floors[i]
-		a.Floors[floor.ID] = floor
+		a.Floors[floor.ID] = &floor
 	}
 }
 
@@ -624,7 +600,9 @@ func (a *Account) preparePolling() {
 // isPollingIntervalReached checks whether the value with the given ID
 // needs to be updated.
 func (a *Account) isPollingIntervalReached(id string, interval int) bool {
+	a.pollingHelpers.mapMutex.Lock()
 	t, ok := a.pollingHelpers.lastPollMap[id]
+	a.pollingHelpers.mapMutex.Unlock()
 	if !ok {
 		return true
 	}
@@ -643,42 +621,41 @@ func (a *Account) setPollingTimeStamp(id string) {
 }
 
 func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int, newValue int) {
-	a.eventHelpers.mapMutex.Lock()
 
-	for id, receiver := range a.eventHelpers.valueChangeReceiver {
-		logger.Info(fmt.Sprintf("calling %s.OnConsumptionValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
-		go receiver.CircuitConsumptionValueChange(circuitID, oldValue, newValue)
+	logger.Info(fmt.Sprintf("ConsumptionValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
+	if a.Events.CircuitConsumptionValueChanged != nil {
+		a.Events.CircuitConsumptionValueChanged <- CircuitConsumptionValueChangeEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
 	}
-	a.eventHelpers.mapMutex.Unlock()
 }
 
 func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newValue int) {
-	a.eventHelpers.mapMutex.Lock()
 
-	for id, receiver := range a.eventHelpers.valueChangeReceiver {
-		logger.Info(fmt.Sprintf("calling %s.OnMeterValueChange for ciruit %s (%d -> %d))", id, circuitID, oldValue, newValue))
-		go receiver.CircuitMeterValueChange(circuitID, oldValue, newValue)
+	logger.Info(fmt.Sprintf("MeterValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
+	if a.Events.CircuitMeterValueChanged != nil {
+		a.Events.CircuitMeterValueChanged <- CircuitMeterValueChangeEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
 	}
-	a.eventHelpers.mapMutex.Unlock()
 }
 
 func (a *Account) dispatchOutputChannelValueChange(deviceID string, channelIndex int, oldValue int, newValue int) {
-	a.eventHelpers.mapMutex.Lock()
-	for id, receiver := range a.eventHelpers.valueChangeReceiver {
-		logger.Info(fmt.Sprintf("calling %s.OnOutputChannelValueChange for channel %s.%d (%d -> %d))", id, deviceID, channelIndex, oldValue, newValue))
-		go receiver.OutputChannelValueChange(deviceID, channelIndex, oldValue, newValue)
+
+	logger.Info(fmt.Sprintf("calling OnOutputChannelValueChange for channel %s.%d (%d -> %d))", deviceID, channelIndex, oldValue, newValue))
+	if a.Events.ChannelValueChanged != nil {
+		a.Events.ChannelValueChanged <- ChannelValueChangeEvent{DeviceID: deviceID, ChannelIndex: channelIndex, OldValue: oldValue, NewValue: newValue}
 	}
-	a.eventHelpers.mapMutex.Unlock()
 }
 
 func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, oldValue float64, newValue float64) {
-	a.eventHelpers.mapMutex.Lock()
-
-	for id, receiver := range a.eventHelpers.valueChangeReceiver {
-		logger.Info(fmt.Sprintf("calling %s.OnSensorValueChange for sensor %s.%d (%f -> %f))", id, deviceID, sensorIndex, oldValue, newValue))
-		go receiver.SensorValueChange(deviceID, sensorIndex, oldValue, newValue)
+	logger.Info(fmt.Sprintf("calling OnSensorValueChange for sensor %s.%d (%f -> %f))", deviceID, sensorIndex, oldValue, newValue))
+	if a.Events.SensorValueChanged != nil {
+		a.Events.SensorValueChanged <- SensorValueChangeEvent{DeviceId: deviceID, SensorIndex: sensorIndex, OldValue: oldValue, NewValue: newValue}
 	}
-	a.eventHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) dispatchOnValueChange(deviceID string, oldValue bool, newValue bool) {
+	logger.Info(fmt.Sprintf("calling OnValueChange for sensor %s.On (%t -> %t))", deviceID, oldValue, newValue))
+	if a.Events.SensorValueChanged != nil {
+		a.Events.OnStateValueChanged <- OnStateValueChangeEvent{DeviceId: deviceID, OldValue: oldValue, NewValue: newValue}
+	}
 }
 
 func (a *Account) performPolling(id string) {
@@ -701,8 +678,18 @@ func (a *Account) performPolling(id string) {
 			logger.Info(fmt.Sprintf("WARNING: %s is not a valid curcuitID ", id))
 			return
 		}
-		a.PollCircuitConsumptionValue(s[1])
-		a.PollCircuitMeterValue(s[1])
+		circuit, ok := a.Circuits[s[1]]
+
+		if !ok {
+			return
+		}
+
+		if !circuit.HasMetering {
+			return
+		}
+
+		a.PollCircuitConsumptionValue(circuit)
+		a.PollCircuitMeterValue(circuit)
 
 	case "sensor":
 		if len(s) != 3 {
@@ -716,6 +703,10 @@ func (a *Account) performPolling(id string) {
 		if err != nil {
 			return
 		}
+		if !sensor.device.IsPresent {
+			return
+		}
+
 		a.PollSensorValue(sensor)
 
 	case "channel":
@@ -730,9 +721,15 @@ func (a *Account) performPolling(id string) {
 		if err != nil {
 			return
 		}
+
+		if !channel.device.IsPresent {
+			return
+		}
 		a.PollChannelValue(channel)
 
 		return
+	case "structure":
+		a.PollStructureValues()
 	default:
 		// place error logging for invalid id over here
 

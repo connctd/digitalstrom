@@ -412,6 +412,10 @@ func (at ApplicationType) GetName() string {
 
 }
 
+func (st SensorType) IsUnknown() bool {
+	return st.GetName() == "Unknown SensorType"
+}
+
 // GetID returns the identifier of the sensor type
 func (st SensorType) GetID() int {
 	return int(st)

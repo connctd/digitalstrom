@@ -1,10 +1,33 @@
 package digitalstrom
 
-// ValueChangeReceiver combines callback methods for value change subsribtion. Methods will be
-// called when values have been changed
-type ValueChangeReceiver interface {
-	OutputChannelValueChange(deviceID string, channelIndex int, oldValue int, newValue int)
-	SensorValueChange(deviceID string, sensorIndex int, oldValue float64, newValue float64)
-	CircuitConsumptionValueChange(circuitID string, oldValue int, newValue int)
-	CircuitMeterValueChange(circuitID string, oldValue int, newValue int)
+type ChannelValueChangeEvent struct {
+	DeviceID     string
+	ChannelIndex int
+	OldValue     int
+	NewValue     int
+}
+
+type SensorValueChangeEvent struct {
+	DeviceId    string
+	SensorIndex int
+	OldValue    float64
+	NewValue    float64
+}
+
+type CircuitConsumptionValueChangeEvent struct {
+	CircuitID string
+	OldValue  int
+	NewValue  int
+}
+
+type CircuitMeterValueChangeEvent struct {
+	CircuitID string
+	OldValue  int
+	NewValue  int
+}
+
+type OnStateValueChangeEvent struct {
+	DeviceId string
+	OldValue bool
+	NewValue bool
 }

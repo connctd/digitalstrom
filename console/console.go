@@ -53,6 +53,7 @@ func main() {
 
 	// generate new Account instance
 	account := *digitalstrom.NewAccount()
+
 	// evaluate program arguments
 	argsWithoutProg := os.Args[1:]
 	if len(argsWithoutProg) > 0 {
@@ -274,7 +275,8 @@ func updateAll(a *digitalstrom.Account) {
 	fmt.Println("Updating Circuit Values")
 	for i := range a.Circuits {
 		fmt.Printf("   Updating consumption of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
-		value, err := a.PollCircuitConsumptionValue(a.Circuits[i].DisplayID)
+		circuit := a.Circuits[i]
+		value, err := a.PollCircuitConsumptionValue(circuit)
 		if err != nil {
 			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
@@ -282,9 +284,9 @@ func updateAll(a *digitalstrom.Account) {
 		}
 
 		fmt.Printf("   Updating meter value of circuit '%s (%s)' ... ", a.Circuits[i].DisplayID, a.Circuits[i].Name)
-		value, err = a.PollCircuitMeterValue(a.Circuits[i].DisplayID)
+		value, err = a.PollCircuitMeterValue(circuit)
 		if err != nil {
-			fmt.Printf("ERROR. %s", err)
+			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
 			fmt.Printf("OK. value = %d Ws\r\n", value)
 		}
@@ -336,7 +338,7 @@ func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
 
 func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 
-	err := a.PollOnValues()
+	err := a.PollStructureValues()
 	if err != nil {
 		fmt.Printf("Error. Unable to update On values '%s'.\r\n", cmd[2])
 		fmt.Println(err)
@@ -466,7 +468,7 @@ func processUpdateMeterValueCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	value, err := a.PollCircuitMeterValue(circuit.DisplayID)
+	value, err := a.PollCircuitMeterValue(circuit)
 	if err != nil {
 		fmt.Println("Error")
 		fmt.Println(err)
@@ -486,7 +488,7 @@ func processUpdateConsumptionCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	value, err := a.PollCircuitConsumptionValue(circuit.DisplayID)
+	value, err := a.PollCircuitConsumptionValue(circuit)
 	if err != nil {
 		fmt.Println("Error")
 		fmt.Println(err)
@@ -712,7 +714,7 @@ func processOnCommand(a *digitalstrom.Account, cmd []string, on bool) {
 		fmt.Printf("Error. Device with display ID '%s' not found.\r\n", cmd[1])
 		return
 	}
-	err := a.TurnOn(&dev, on)
+	err := a.TurnOn(dev, on)
 	if err != nil {
 		fmt.Printf("Error. Unable to set device '%s' on|off.\r\n", cmd[2])
 		fmt.Println(err)
@@ -769,6 +771,7 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 		processPrintZoneCmd(a, cmd)
 	case "group":
 		processPrintGroupCmd(a, cmd)
+
 	case "token":
 		fmt.Printf("  application token = %s\r\n", a.Connection.ApplicationToken)
 		fmt.Printf("      session token = %s\r\n", a.Connection.SessionToken)
@@ -839,7 +842,7 @@ func processPrintZoneCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("\n\rError. Zone with id '%s' was not found.\r\n", cmd[2])
 		return
 	}
-	node := generateZoneNode(&zone)
+	node := generateZoneNode(zone)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
@@ -873,7 +876,7 @@ func processPrintGroupCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("\n\rError. Group with id '%s' could not be found.\r\n", cmd[2])
 		return
 	}
-	node := generateGroupNode(&group)
+	node := generateGroupNode(group)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
@@ -907,7 +910,7 @@ func processPrintFloorCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("\n\rError. Floor with id '%s' was not found.\r\n", cmd[2])
 		return
 	}
-	node := generateFloorNode(&floor)
+	node := generateFloorNode(floor)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
@@ -934,7 +937,7 @@ func processPrintDeviceCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Printf("\n\rError. Device with displayID '%s' could not be found.\r\n", cmd[2])
 		return
 	}
-	node := generateDeviceNode(&device)
+	node := generateDeviceNode(device)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
@@ -973,7 +976,7 @@ func processPrintCircuitCmd(a *digitalstrom.Account, cmd []string) {
 		return
 	}
 
-	node := generateCircuitNode(&circuit)
+	node := generateCircuitNode(circuit)
 	if len(cmd) == 4 {
 		l, err := strconv.Atoi(cmd[3])
 		if err != nil {
@@ -1078,7 +1081,7 @@ func generateDevicesNode(a *digitalstrom.Account) node {
 	n := node{name: "Devices"}
 
 	for _, device := range a.Devices {
-		n.childs = append(n.childs, generateDeviceNode(&device))
+		n.childs = append(n.childs, generateDeviceNode(device))
 	}
 
 	return n
@@ -1155,7 +1158,7 @@ func generateCircuitsNode(a *digitalstrom.Account) node {
 	n := node{name: "Circuits"}
 
 	for _, circuit := range a.Circuits {
-		n.childs = append(n.childs, generateCircuitNode(&circuit))
+		n.childs = append(n.childs, generateCircuitNode(circuit))
 	}
 
 	return n
