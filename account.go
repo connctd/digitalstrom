@@ -133,6 +133,15 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	return &device.Sensors[sensorIndex], nil
 }
 
+func (a *Account) IsDevicePresent(deviceID string) (bool, error) {
+	device, ok := a.Devices[deviceID]
+	if !ok {
+		return false, errors.New("no device with id '" + deviceID + "' found")
+	}
+	return device.IsPresent, nil
+
+}
+
 //GetOutputChannel Returning the output channel with die index ID <channelIndex> of device with display ID <deviceID> or nil when either
 // device with the given ID couldn't be found or the OutputChannel index is higher than the amount of channels the device has
 func (a *Account) GetOutputChannel(deviceID string, channelIndex int) (*OutputChannel, error) {
@@ -274,7 +283,8 @@ func (a *Account) ResetPollingIntervals() {
 // StartPolling starts the update routine. It calls the internal prepareUpdates function.
 // When no update intervals are given in advance, a complete list of update intervals will
 // be generated automatically (including all sensors, output channesl and circuits) by using
-// the related default intervals.
+// the related default intervals. Intervals can be set individually, intervals with a value lower
+// than 0 will be skipped
 func (a *Account) StartPolling() {
 	a.preparePolling()
 	ticker := *time.NewTicker(time.Second)
@@ -283,14 +293,16 @@ func (a *Account) StartPolling() {
 			select {
 			case <-ticker.C:
 				for id, interval := range a.pollingHelpers.pollIntervalMap {
-					if a.isPollingIntervalReached(id, interval) {
-						if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
-							a.pollingHelpers.mapMutex.Lock()
-							_, ok := a.pollingHelpers.activePollingMap[id]
-							a.pollingHelpers.mapMutex.Unlock()
-							if !ok {
-								a.pollingHelpers.parallelPollCount++
-								go a.performPolling(id)
+					if interval >= 0 { // intervals lower than 0 will be skipped
+						if a.isPollingIntervalReached(id, interval) {
+							if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
+								a.pollingHelpers.mapMutex.Lock()
+								_, ok := a.pollingHelpers.activePollingMap[id]
+								a.pollingHelpers.mapMutex.Unlock()
+								if !ok {
+									a.pollingHelpers.parallelPollCount++
+									go a.performPolling(id)
+								}
 							}
 						}
 					}
@@ -699,6 +711,11 @@ func (a *Account) performPolling(id string) {
 		if err != nil {
 			return
 		}
+		present, _ := a.IsDevicePresent(s[1])
+		if !present {
+			logger.Info(fmt.Sprintf("skipped %s - device is not present)", id))
+			return
+		}
 		sensor, err := a.GetSensor(s[1], number)
 		if err != nil {
 			return
@@ -715,6 +732,11 @@ func (a *Account) performPolling(id string) {
 		}
 		number, err := strconv.Atoi(s[2])
 		if err != nil {
+			return
+		}
+		present, _ := a.IsDevicePresent(s[1])
+		if !present {
+			logger.Info(fmt.Sprintf("skipped %s - device is not present)", id))
 			return
 		}
 		channel, err := a.GetOutputChannel(s[1], number)
