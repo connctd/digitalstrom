@@ -561,7 +561,7 @@ func (a *Account) PollChannelValue(channel *OutputChannel) (int, error) {
 	if channel.Value != int_value {
 		oldValue := channel.Value
 		channel.Value = int_value
-		a.dispatchOutputChannelValueChange(channel.device.ID, channel.ChannelIndex, oldValue, int_value)
+		a.dispatchOutputChannelValueChange(channel.device.DisplayID, channel.ChannelIndex, oldValue, int_value)
 	}
 
 	return int_value, nil
