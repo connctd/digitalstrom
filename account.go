@@ -681,7 +681,7 @@ func (a *Account) performPolling(id string) {
 	a.pollingHelpers.activePollingMap[id] = time.Now()
 	a.pollingHelpers.mapMutex.Unlock()
 
-	logger.Info(fmt.Sprintf("updating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls))
+	//logger.Info(fmt.Sprintf("updating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls))
 
 	// ids are separated by '.'
 	s := strings.Split(id, "•")
@@ -715,7 +715,7 @@ func (a *Account) performPolling(id string) {
 		}
 		present, _ := a.IsDevicePresent(s[1])
 		if !present {
-			logger.Info(fmt.Sprintf("skipped %s - device is not present)", id))
+			//	logger.Info(fmt.Sprintf("skipped %s - device is not present)", id))
 			return
 		}
 		sensor, err := a.GetSensor(s[1], number)
