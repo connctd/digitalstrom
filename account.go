@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -82,7 +83,8 @@ func SetLogger(newLogger logr.Logger) {
 func NewAccount() *Account {
 	return &Account{
 		Connection: Connection{
-			BaseURL: defautBaseURL,
+			BaseURL:    defautBaseURL,
+			HTTPClient: http.DefaultClient,
 		},
 		Devices:           make(map[string]*Device),
 		Groups:            make(map[int]*Group),

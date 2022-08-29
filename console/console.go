@@ -26,7 +26,10 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+
 	"os"
 	"strconv"
 	"strings"
@@ -54,6 +57,11 @@ func main() {
 	// generate new Account instance
 	account := *digitalstrom.NewAccount()
 
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+	account.Connection.HTTPClient = client
 	// evaluate program arguments
 	argsWithoutProg := os.Args[1:]
 	if len(argsWithoutProg) > 0 {

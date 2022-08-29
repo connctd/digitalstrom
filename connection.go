@@ -1,7 +1,6 @@
 package digitalstrom
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,7 +53,7 @@ type Connection struct {
 	SessionToken     string
 	ApplicationToken string
 	BaseURL          string
-	HTTPClient       http.Client
+	HTTPClient       *http.Client
 }
 
 // Get Performs a GET request and returns the response body as string
@@ -92,7 +91,7 @@ func (c *Connection) Request(url string, method requestMethod, body string, para
 }
 
 func (c *Connection) generateHTTPRequest(url string, method requestMethod, body string, params map[string]string) (*http.Request, error) {
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	//	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 
 	var req *http.Request
 	var err error
