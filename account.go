@@ -21,7 +21,7 @@ const (
 	defaultSensorPollingInterval                  = 300
 	defaultCircuitPollingInterval                 = 15
 	defaultChannelPollingInterval                 = 300
-	defaultTemperatureControlStatePollingInterval = 20
+	defaultTemperatureControlStatePollingInterval = 250
 	defaultStructurePollingInterval               = 30
 	defaultMaxSimultanousPolls                    = 10
 )
