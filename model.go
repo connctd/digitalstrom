@@ -39,12 +39,13 @@ type Apartment struct {
 // Zone is a logical representation of one room, hall or
 // other partial structural works of a building.
 type Zone struct {
-	ID        int      `json:"id"`
-	Name      string   `json:"name"`
-	IsPresent bool     `json:"isPresent"`
-	FloorID   int      `json:"floorId"`
-	Devices   []Device `json:"devices"`
-	Groups    []Group  `json:"groups"`
+	ID                 int      `json:"id"`
+	Name               string   `json:"name"`
+	IsPresent          bool     `json:"isPresent"`
+	FloorID            int      `json:"floorId"`
+	Devices            []Device `json:"devices"`
+	Groups             []Group  `json:"groups"`
+	TemperatureControl *TemperatureControlState
 }
 
 // Floor contains Zones

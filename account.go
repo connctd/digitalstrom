@@ -18,23 +18,25 @@ import (
 
 // Default polling setup values
 const (
-	defaultSensorPollingInterval    = 300
-	defaultCircuitPollingInterval   = 15
-	defaultChannelPollingInterval   = 300
-	defaultStructurePollingInterval = 30
-	defaultMaxSimultanousPolls      = 10
+	defaultSensorPollingInterval                  = 300
+	defaultCircuitPollingInterval                 = 15
+	defaultChannelPollingInterval                 = 300
+	defaultTemperatureControlStatePollingInterval = 20
+	defaultStructurePollingInterval               = 30
+	defaultMaxSimultanousPolls                    = 10
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
 // faster communication
 type Account struct {
-	Connection Connection
-	Structure  Structure
-	Devices    map[string]*Device
-	Groups     map[int]*Group
-	Zones      map[int]*Zone
-	Floors     map[int]*Floor
-	Circuits   map[string]*Circuit
+	Connection         Connection
+	Structure          Structure
+	Devices            map[string]*Device
+	Groups             map[int]*Group
+	Zones              map[int]*Zone
+	Floors             map[int]*Floor
+	Circuits           map[string]*Circuit
+	TemperatureControl map[int]*TemperatureControlState
 	//Scenes     map[string]Scene
 
 	// updating
@@ -46,21 +48,37 @@ type Account struct {
 	Events EventChannels
 }
 
+type TemperatureControlState struct {
+	ZoneId           int     `json:"id"`
+	Name             string  `json:"name"`
+	ControlMode      int     `json:"ControlMode"`
+	ControlState     int     `json:"ControlState"`
+	OperationMode    int     `json:"OperationMode"`
+	TemperatureValue float64 `json:"TemperatureValue"`
+	//TemperatureValueTime
+	NominalValue float64 `json:"NominalValue"`
+	//NominalValueTime
+	ControlValue float64 `json:"ControlValue"`
+	//ControlValueTime
+}
+
 // PollingSetup defines update settings for automated value polling
 type PollingSetup struct {
-	DefaultCircuitsPollingInterval  int `json:"default_circuit_polling_interval"`
-	DefaultSensorsPollingInterval   int `json:"default_sensors_polling_interval"`
-	DefaultChannelsPollingInterval  int `json:"default_channels_polling_interval"`
-	DefaultStructurePollingInterval int `json:"default_on_value_polling_interval"`
-	MaxParallelPolls                int `json:"max_parallel_polls"`
+	DefaultCircuitsPollingInterval                int `json:"default_circuit_polling_interval"`
+	DefaultSensorsPollingInterval                 int `json:"default_sensors_polling_interval"`
+	DefaultChannelsPollingInterval                int `json:"default_channels_polling_interval"`
+	DefaultStructurePollingInterval               int `json:"default_on_value_polling_interval"`
+	DefaultTemperatureControlStatePollingInterval int `json:"default_temperature_control_state_polling_intervall"`
+	MaxParallelPolls                              int `json:"max_parallel_polls"`
 }
 
 type EventChannels struct {
-	SensorValueChanged             chan<- SensorValueChangeEvent
-	ChannelValueChanged            chan<- ChannelValueChangeEvent
-	CircuitMeterValueChanged       chan<- CircuitMeterValueChangeEvent
-	CircuitConsumptionValueChanged chan<- CircuitConsumptionValueChangeEvent
-	OnStateValueChanged            chan<- OnStateValueChangeEvent
+	SensorValueChanged                 chan<- SensorValueChangeEvent
+	ChannelValueChanged                chan<- ChannelValueChangeEvent
+	CircuitMeterValueChanged           chan<- CircuitMeterValueChangeEvent
+	CircuitConsumptionValueChanged     chan<- CircuitConsumptionValueChangeEvent
+	OnStateValueChanged                chan<- OnStateValueChangeEvent
+	ZoneTemperatureControlStateChanged chan<- ZoneTemperatureControlChangeEvent
 }
 
 type pollingHelpers struct {
@@ -86,18 +104,20 @@ func NewAccount() *Account {
 			BaseURL:    defautBaseURL,
 			HTTPClient: http.DefaultClient,
 		},
-		Devices:           make(map[string]*Device),
-		Groups:            make(map[int]*Group),
-		Zones:             make(map[int]*Zone),
-		Floors:            make(map[int]*Floor),
-		Circuits:          make(map[string]*Circuit),
-		quitTickerChannel: make(chan bool),
+		Devices:            make(map[string]*Device),
+		Groups:             make(map[int]*Group),
+		Zones:              make(map[int]*Zone),
+		Floors:             make(map[int]*Floor),
+		Circuits:           make(map[string]*Circuit),
+		TemperatureControl: make(map[int]*TemperatureControlState),
+		quitTickerChannel:  make(chan bool),
 		PollingSetup: PollingSetup{
-			DefaultCircuitsPollingInterval:  defaultCircuitPollingInterval,
-			DefaultChannelsPollingInterval:  defaultChannelPollingInterval,
-			DefaultSensorsPollingInterval:   defaultSensorPollingInterval,
-			DefaultStructurePollingInterval: defaultStructurePollingInterval,
-			MaxParallelPolls:                defaultMaxSimultanousPolls,
+			DefaultCircuitsPollingInterval:                defaultCircuitPollingInterval,
+			DefaultChannelsPollingInterval:                defaultChannelPollingInterval,
+			DefaultSensorsPollingInterval:                 defaultSensorPollingInterval,
+			DefaultStructurePollingInterval:               defaultStructurePollingInterval,
+			DefaultTemperatureControlStatePollingInterval: defaultTemperatureControlStatePollingInterval,
+			MaxParallelPolls:                              defaultMaxSimultanousPolls,
 		},
 		pollingHelpers: pollingHelpers{
 			parallelPollCount: 0,
@@ -106,12 +126,7 @@ func NewAccount() *Account {
 			lastPollMap:       make(map[string]time.Time),
 			mapMutex:          &sync.Mutex{},
 		},
-		Events: EventChannels{
-			//	ChannelValueChanged:            make(chan ChannelValueChangeEvent),
-			//		SensorValueChanged:             make(chan SensorValueChangeEvent),
-			//		CircuitMeterValueChanged:       make(chan CircuitMeterValueChangeEvent),
-			//		CircuitConsumptionValueChanged: make(chan CircuitConsumptionValueChangeEvent, 5),
-		},
+		Events: EventChannels{},
 	}
 
 }
@@ -183,6 +198,17 @@ func (a *Account) Init() error {
 	for i := range circuits {
 		a.Circuits[circuits[i].DisplayID] = &circuits[i]
 	}
+	logger.Info("requesting temperature control states")
+	tempValues, err := a.RequestTemperatureControlStatus()
+	if err != nil {
+		logger.Error(err, "initialisation has been aborted")
+		return err
+	}
+	// fill the circuit map for fast access
+	for i := range tempValues {
+		a.TemperatureControl[tempValues[i].ZoneId] = &tempValues[i]
+	}
+	a.assignTempControlStatesToZones()
 	logger.Info("account successfully initialized")
 	return nil
 }
@@ -224,6 +250,35 @@ func (a *Account) RequestCircuits() ([]Circuit, error) {
 
 	// there we are, return everything
 	return circuits, nil
+}
+
+// RequestTemperatureControlStatus performs a getTemperatureControlStatus request.
+func (a *Account) RequestTemperatureControlStatus() ([]TemperatureControlState, error) {
+	res, err := a.Connection.Get(a.Connection.BaseURL + "/json/apartment/getTemperatureControlStatus")
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !res.OK {
+		return nil, errors.New(res.Message)
+	}
+	// get result as map[string]interface{}
+	jsonString, err := json.Marshal(res.Result["zones"])
+
+	if err != nil {
+		return nil, err
+	}
+
+	tempControlState := []TemperatureControlState{}
+
+	err = json.Unmarshal(jsonString, &tempControlState)
+	if err != nil {
+		return nil, err
+	}
+
+	// there we are, return everything
+	return tempControlState, nil
 }
 
 // RequestStructure performs a getStructure request and returns it or an error that might have been occured.
@@ -341,6 +396,7 @@ func (a *Account) SetDefaultPollingIntervals() {
 		a.pollingHelpers.pollIntervalMap["circuit•"+circuitID] = a.PollingSetup.DefaultCircuitsPollingInterval
 	}
 	a.pollingHelpers.pollIntervalMap["structure"] = a.PollingSetup.DefaultStructurePollingInterval
+	a.pollingHelpers.pollIntervalMap["temperatureControlState"] = a.PollingSetup.DefaultTemperatureControlStatePollingInterval
 
 }
 
@@ -509,6 +565,48 @@ func (a *Account) PollStructureValues() error {
 	return nil
 }
 
+func (a *Account) PollTemperatureControlValues() error {
+	vals, err := a.RequestTemperatureControlStatus()
+	if err != nil {
+		return err
+	}
+
+	for i := range vals {
+		tempCtrl, ok := a.TemperatureControl[vals[i].ZoneId]
+		somethingChanged := false
+		if ok {
+			if tempCtrl.OperationMode != vals[i].OperationMode {
+				somethingChanged = true
+				tempCtrl.OperationMode = vals[i].OperationMode
+			}
+			if tempCtrl.ControlMode != vals[i].ControlMode {
+				somethingChanged = true
+				tempCtrl.ControlMode = vals[i].ControlMode
+			}
+			if tempCtrl.ControlState != vals[i].ControlState {
+				somethingChanged = true
+				tempCtrl.ControlState = vals[i].ControlState
+			}
+			if tempCtrl.ControlValue != vals[i].ControlValue {
+				somethingChanged = true
+				tempCtrl.ControlValue = vals[i].ControlValue
+			}
+			if tempCtrl.NominalValue != vals[i].NominalValue {
+				somethingChanged = true
+				tempCtrl.NominalValue = vals[i].NominalValue
+			}
+			if tempCtrl.TemperatureValue != vals[i].TemperatureValue {
+				somethingChanged = true
+				tempCtrl.TemperatureValue = vals[i].TemperatureValue
+			}
+			if somethingChanged {
+				a.dispatchTemperatureControlStateChanged(tempCtrl.ZoneId)
+			}
+		}
+	}
+	return nil
+}
+
 // PollSensorValue is requesting the current value the given sensor has. The value will be assigned
 // the the sensor.
 func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
@@ -577,6 +675,15 @@ func (a *Account) setStructure(structure Structure) {
 	a.buildMaps()
 }
 
+func (a *Account) assignTempControlStatesToZones() {
+	for zoneId, tempControlState := range a.TemperatureControl {
+		zone, ok := a.Zones[zoneId]
+		if ok {
+			zone.TemperatureControl = tempControlState
+		}
+	}
+}
+
 // buldMaps is generating maps for devices, circuits, zones, groups
 // and floors for fast access. It should be called whenever a structure,
 // circuit or groups are requested
@@ -592,6 +699,7 @@ func (a *Account) buildMaps() {
 			device := a.Structure.Apartment.Zones[i].Devices[j]
 			a.Devices[device.DisplayID] = &device
 		}
+
 	}
 	for i := range a.Structure.Apartment.Floors {
 		floor := a.Structure.Apartment.Floors[i]
@@ -669,6 +777,13 @@ func (a *Account) dispatchOnValueChange(deviceID string, oldValue bool, newValue
 	logger.Info(fmt.Sprintf("calling OnValueChange for sensor %s.On (%t -> %t))", deviceID, oldValue, newValue))
 	if a.Events.SensorValueChanged != nil {
 		a.Events.OnStateValueChanged <- OnStateValueChangeEvent{DeviceId: deviceID, OldValue: oldValue, NewValue: newValue}
+	}
+}
+
+func (a *Account) dispatchTemperatureControlStateChanged(zoneId int) {
+	logger.Info(fmt.Sprintf("calling OnTemperatureControlStateChange for zone %d", zoneId))
+	if a.Events.ZoneTemperatureControlStateChanged != nil {
+		a.Events.ZoneTemperatureControlStateChanged <- ZoneTemperatureControlChangeEvent{ZoneId: zoneId}
 	}
 }
 
@@ -754,6 +869,8 @@ func (a *Account) performPolling(id string) {
 		return
 	case "structure":
 		a.PollStructureValues()
+	case "temperatureControlState":
+		a.PollTemperatureControlValues()
 	default:
 		// place error logging for invalid id over here
 

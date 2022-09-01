@@ -242,6 +242,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processUpdateChannelCmd(a, cmd)
 	case "channels":
 		processUpdateChannelsCmd(a, cmd)
+	case "temperatureControls":
+		processUpdateTemperatureControlCmd(a, cmd)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -352,6 +354,16 @@ func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
+}
+
+func processUpdateTemperatureControlCmd(a *digitalstrom.Account, cmd []string) {
+	err := a.PollTemperatureControlValues()
+	if err != nil {
+		fmt.Printf("Error. Unable to update temperature control states.\r\n")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println()
 }
 
 func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
@@ -779,7 +791,10 @@ func processPrintCommand(a *digitalstrom.Account, cmd []string) {
 		processPrintZoneCmd(a, cmd)
 	case "group":
 		processPrintGroupCmd(a, cmd)
-
+	case "temperatureControls":
+		processPrintTemperatureControlsCmd(a, cmd)
+	case "temperatureControl":
+		processPrintTemperatureControlCmd(a, cmd)
 	case "token":
 		fmt.Printf("  application token = %s\r\n", a.Connection.ApplicationToken)
 		fmt.Printf("      session token = %s\r\n", a.Connection.SessionToken)
@@ -894,6 +909,42 @@ func processPrintGroupCmd(a *digitalstrom.Account, cmd []string) {
 		printNode("", "", true, &node, l+1)
 		return
 	}
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintTemperatureControlsCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 2 {
+		fmt.Println("\r\nError. Invalid command. Use -> print temperatureControls]")
+		return
+	}
+	node := node{name: "Temperature Control States"}
+
+	for _, tempCtrlState := range a.TemperatureControl {
+		node.childs = append(node.childs, generateTemperatureControlStateNode(tempCtrlState))
+	}
+
+	printNode("", "", true, &node, -1)
+}
+
+func processPrintTemperatureControlCmd(a *digitalstrom.Account, cmd []string) {
+	if len(cmd) != 3 {
+		fmt.Println("\r\nError. Invalid print temperatureControl command. Use -> print temperatureControl <zoneId>]")
+		return
+	}
+
+	id, err := strconv.Atoi(cmd[2])
+	if err != nil {
+		fmt.Printf("\n\rError. '%s' is not a number. Zone ID must be a number.\r\n", cmd[2])
+		return
+	}
+	tempCtrlState, ok := a.TemperatureControl[id]
+	if !ok {
+		fmt.Printf("\n\rError. Found no temperature control state for zone %d.\r\n", id)
+		return
+	}
+
+	node := generateTemperatureControlStateNode(tempCtrlState)
+
 	printNode("", "", true, &node, -1)
 }
 
@@ -1054,6 +1105,10 @@ func generateZoneNode(zone *digitalstrom.Zone) node {
 	n.elems = append(n.elems, "FloorID    "+strconv.Itoa(zone.FloorID))
 	n.elems = append(n.elems, "IsPresent  "+strconv.FormatBool(zone.IsPresent))
 
+	if zone.TemperatureControl != nil {
+		n.childs = append(n.childs, generateTemperatureControlStateNode(zone.TemperatureControl))
+	}
+
 	for _, device := range zone.Devices {
 		n.childs = append(n.childs, generateDeviceNode(&device))
 	}
@@ -1062,6 +1117,20 @@ func generateZoneNode(zone *digitalstrom.Zone) node {
 		n.childs = append(n.childs, generateGroupNode(&group))
 	}
 
+	return n
+}
+
+func generateTemperatureControlStateNode(tempCtrlState *digitalstrom.TemperatureControlState) node {
+	n := node{name: "Temperature Control Zone (" + strconv.Itoa(tempCtrlState.ZoneId) + ")"}
+
+	n.elems = append(n.elems, fmt.Sprintf("Name              %s", tempCtrlState.Name))
+	n.elems = append(n.elems, fmt.Sprintf("ZoneId            %d", tempCtrlState.ZoneId))
+	n.elems = append(n.elems, fmt.Sprintf("TemperatureValue  %.2f", tempCtrlState.TemperatureValue))
+	n.elems = append(n.elems, fmt.Sprintf("ControlValue      %.2f", tempCtrlState.ControlValue))
+	n.elems = append(n.elems, fmt.Sprintf("NominalValue      %.2f", tempCtrlState.NominalValue))
+	n.elems = append(n.elems, fmt.Sprintf("ControlMode       %d", tempCtrlState.ControlMode))
+	n.elems = append(n.elems, fmt.Sprintf("ControlState      %d", tempCtrlState.ControlState))
+	n.elems = append(n.elems, fmt.Sprintf("OperationlMode    %d", tempCtrlState.OperationMode))
 	return n
 }
 
@@ -1250,12 +1319,15 @@ func printHelp() {
 	fmt.Println("                 group <groupID> [depth level]")
 	fmt.Println("                 help")
 	fmt.Println("                 structure [depth level]")
+	fmt.Println("                 temperatureControl <zoneID>")
+	fmt.Println("                 temperatureControls")
 	fmt.Println("                 token")
 	fmt.Println("                 zone <zoneID> [depth level]")
 	fmt.Println("        register <username> <password> <application name>")
 	fmt.Println("         request circuits")
 	fmt.Println("                 structure")
 	fmt.Println("                 system")
+	fmt.Println("                 temperatureControls")
 	fmt.Println("           reset pollingintervals")
 	fmt.Println("             set at <application token>")
 	fmt.Println("                 default pollingintervals")
@@ -1275,6 +1347,7 @@ func printHelp() {
 	fmt.Println("                 on")
 	fmt.Println("                 sensor <deviceID> <sensorIndex>")
 	fmt.Println("                 sensors <deviceID>")
+	fmt.Println("                 temperatureControls")
 
 }
 

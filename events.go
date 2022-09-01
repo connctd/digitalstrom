@@ -31,3 +31,7 @@ type OnStateValueChangeEvent struct {
 	OldValue bool
 	NewValue bool
 }
+
+type ZoneTemperatureControlChangeEvent struct {
+	ZoneId int
+}
