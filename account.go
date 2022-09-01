@@ -79,6 +79,7 @@ type EventChannels struct {
 	CircuitConsumptionValueChanged     chan<- CircuitConsumptionValueChangeEvent
 	OnStateValueChanged                chan<- OnStateValueChangeEvent
 	ZoneTemperatureControlStateChanged chan<- ZoneTemperatureControlChangeEvent
+	chanMutex                          *sync.Mutex
 }
 
 type pollingHelpers struct {
@@ -86,6 +87,7 @@ type pollingHelpers struct {
 	pollIntervalMap   map[string]int
 	lastPollMap       map[string]time.Time
 	activePollingMap  map[string]time.Time
+	pollingStopped    bool
 	mapMutex          *sync.Mutex
 }
 
@@ -124,9 +126,12 @@ func NewAccount() *Account {
 			pollIntervalMap:   nil,
 			activePollingMap:  make(map[string]time.Time),
 			lastPollMap:       make(map[string]time.Time),
+			pollingStopped:    true,
 			mapMutex:          &sync.Mutex{},
 		},
-		Events: EventChannels{},
+		Events: EventChannels{
+			chanMutex: &sync.Mutex{},
+		},
 	}
 
 }
@@ -343,6 +348,9 @@ func (a *Account) ResetPollingIntervals() {
 // the related default intervals. Intervals can be set individually, intervals with a value lower
 // than 0 will be skipped
 func (a *Account) StartPolling() {
+	a.Events.chanMutex.Lock()
+	a.pollingHelpers.pollingStopped = false
+	a.Events.chanMutex.Unlock()
 	a.preparePolling()
 	ticker := *time.NewTicker(time.Second)
 	go func() {
@@ -453,6 +461,9 @@ func (a *Account) SetURL(url string) {
 // StopPolling stops the autonomous updater. Values will not requested until
 // updater will be started again
 func (a *Account) StopPolling() {
+	a.Events.chanMutex.Lock()
+	a.pollingHelpers.pollingStopped = true
+	a.Events.chanMutex.Unlock()
 	a.quitTickerChannel <- true
 }
 
@@ -667,6 +678,35 @@ func (a *Account) PollChannelValue(channel *OutputChannel) (int, error) {
 	return int_value, nil
 }
 
+func (a *Account) CloseChannels() {
+	a.Events.chanMutex.Lock()
+	if a.Events.ChannelValueChanged != nil {
+		close(a.Events.ChannelValueChanged)
+		a.Events.ChannelValueChanged = nil
+	}
+	if a.Events.SensorValueChanged != nil {
+		close(a.Events.SensorValueChanged)
+		a.Events.SensorValueChanged = nil
+	}
+	if a.Events.CircuitConsumptionValueChanged != nil {
+		close(a.Events.CircuitConsumptionValueChanged)
+		a.Events.CircuitConsumptionValueChanged = nil
+	}
+	if a.Events.CircuitMeterValueChanged != nil {
+		close(a.Events.CircuitMeterValueChanged)
+		a.Events.CircuitMeterValueChanged = nil
+	}
+	if a.Events.OnStateValueChanged != nil {
+		close(a.Events.OnStateValueChanged)
+		a.Events.OnStateValueChanged = nil
+	}
+	if a.Events.ZoneTemperatureControlStateChanged != nil {
+		close(a.Events.ZoneTemperatureControlStateChanged)
+		a.Events.ZoneTemperatureControlStateChanged = nil
+	}
+	a.Events.chanMutex.Unlock()
+}
+
 // SetStructure assigns a structure to the account, maps will be build and cross references assigned.
 // It is highy recommended to use this function in order to assign a structure rather than assign them directly.
 func (a *Account) setStructure(structure Structure) {
@@ -745,43 +785,75 @@ func (a *Account) setPollingTimeStamp(id string) {
 func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int, newValue int) {
 
 	logger.Info(fmt.Sprintf("ConsumptionValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
-	if a.Events.CircuitConsumptionValueChanged != nil {
-		a.Events.CircuitConsumptionValueChanged <- CircuitConsumptionValueChangeEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
+
+	if a.pollingHelpers.pollingStopped {
+		return
 	}
+	a.Events.chanMutex.Lock()
+	if a.Events.CircuitConsumptionValueChanged != nil {
+
+		a.Events.CircuitConsumptionValueChanged <- CircuitConsumptionValueChangeEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
+
+	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newValue int) {
 
 	logger.Info(fmt.Sprintf("MeterValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+	a.Events.chanMutex.Lock()
 	if a.Events.CircuitMeterValueChanged != nil {
 		a.Events.CircuitMeterValueChanged <- CircuitMeterValueChangeEvent{CircuitID: circuitID, OldValue: oldValue, NewValue: newValue}
 	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchOutputChannelValueChange(deviceID string, channelIndex int, oldValue int, newValue int) {
 
 	logger.Info(fmt.Sprintf("calling OnOutputChannelValueChange for channel %s.%d (%d -> %d))", deviceID, channelIndex, oldValue, newValue))
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+	a.Events.chanMutex.Lock()
 	if a.Events.ChannelValueChanged != nil {
 		a.Events.ChannelValueChanged <- ChannelValueChangeEvent{DeviceID: deviceID, ChannelIndex: channelIndex, OldValue: oldValue, NewValue: newValue}
 	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, oldValue float64, newValue float64) {
 	logger.Info(fmt.Sprintf("calling OnSensorValueChange for sensor %s.%d (%f -> %f))", deviceID, sensorIndex, oldValue, newValue))
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+	a.Events.chanMutex.Lock()
 	if a.Events.SensorValueChanged != nil {
 		a.Events.SensorValueChanged <- SensorValueChangeEvent{DeviceId: deviceID, SensorIndex: sensorIndex, OldValue: oldValue, NewValue: newValue}
 	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchOnValueChange(deviceID string, oldValue bool, newValue bool) {
+
 	logger.Info(fmt.Sprintf("calling OnValueChange for sensor %s.On (%t -> %t))", deviceID, oldValue, newValue))
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+	a.Events.chanMutex.Lock()
 	if a.Events.SensorValueChanged != nil {
 		a.Events.OnStateValueChanged <- OnStateValueChangeEvent{DeviceId: deviceID, OldValue: oldValue, NewValue: newValue}
 	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchTemperatureControlStateChanged(zoneId int) {
 	logger.Info(fmt.Sprintf("calling OnTemperatureControlStateChange for zone %d", zoneId))
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
 	if a.Events.ZoneTemperatureControlStateChanged != nil {
 		a.Events.ZoneTemperatureControlStateChanged <- ZoneTemperatureControlChangeEvent{ZoneId: zoneId}
 	}
@@ -796,9 +868,13 @@ func (a *Account) performPolling(id string) {
 	a.pollingHelpers.activePollingMap[id] = time.Now()
 	a.pollingHelpers.mapMutex.Unlock()
 
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+
 	//logger.Info(fmt.Sprintf("updating %s (%d/%d)", id, a.pollingHelpers.parallelPollCount, a.PollingSetup.MaxParallelPolls))
 
-	// ids are separated by '.'
+	// ids are separated by '•'
 	s := strings.Split(id, "•")
 
 	switch s[0] {
