@@ -13,7 +13,7 @@ package main
 *
 *	The file console.go is not needed for using the library. It contains console utilities that allows a
 *   stand-alone command line usage of the library. It could be seen as reference implementation
-*   for demonstrating the capabilities of that digitalstorm go-library.
+*   for demonstrating the capabilities of the digitalstorm go-library.
 *
 *	Structure of this file:			console.go  ┐
 *												├ main()
@@ -202,11 +202,13 @@ func processLoginCommand(a *digitalstrom.Account, cmd []string) {
 }
 
 func processRegisterCommand(a *digitalstrom.Account, cmd []string) {
-	if len(cmd) != 4 {
+
+	if len(cmd) != 5 {
 		fmt.Println("Error. Not a valid register command.")
 		return
 	}
-	atoken, err := a.RegisterApplication(cmd[3], cmd[1], cmd[2])
+	a.SetURL(cmd[1])
+	atoken, err := a.RegisterApplication(cmd[4], cmd[2], cmd[3])
 	if err != nil {
 		fmt.Println("Error. Unable to register application.")
 		fmt.Println(err)
@@ -1262,12 +1264,12 @@ func generateCircuitNode(c *digitalstrom.Circuit) node {
 func printProgramArguments() {
 	fmt.Println("possible commands: console [-at <application token>]")
 	fmt.Println("                           [-url <url>]")
-	fmt.Println("                           [-r <username> <password> <application name>]")
+	fmt.Println("                           [-r <url> <username> <password> <application name>]")
 	fmt.Println("                           [-h]")
 	fmt.Println("                           [--help]")
 	fmt.Println()
 	fmt.Println("      -at     set the application token")
-	fmt.Println("      -ur     set the server address (including protocol and port)")
+	fmt.Println("      -url    set the server address (including protocol and port)")
 	fmt.Println("      -r      registers a new application")
 	fmt.Println("      -h      prints this help screen")
 	fmt.Println("      --help  prints this help screen")
