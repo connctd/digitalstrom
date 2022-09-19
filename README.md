@@ -5,11 +5,6 @@ digitalSTROM (dS) connects electrical devices via the existing power line and en
 A complete documentation of the local API could be found [here](https://developer.digitalstrom.org/Architecture/v1.7/).
 
 # How to use
-
-## Web Access to digitalStrom could
-
-The access to the web API (ds.could) is not supported yet.
-
 ## Local access
 
 ### Create new account instance
