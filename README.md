@@ -192,8 +192,8 @@ will perform a structure requests and updates all ```On``` states for all device
 
 ### ON State for Lamps
 
-Setting the on state by the command 
+The ```On``` of a lamp could be set with the command
 
     Account.TurnOn(device *Device, on bool) 
 
-the lamp will turn or off (depending on the parameter on). However, by setting the output channel value for ```brightness``` to a value higher than 0% and does not force the system to set the ```On``` state to be set to ```true```. Same vise versa, setting the ```brightness``` to 0% will not set the ```On``` value to ```false```. 
+The lamp will turn or off (depending on the parameter on). However, by setting the output channel value for ```brightness``` to a value higher than 0%, it does not force the system to set the ```On``` state to ```true```. Same vise versa, setting the ```brightness``` to 0% will not set the ```On``` value to ```false```. 
