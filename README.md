@@ -73,9 +73,75 @@ The Structure object covers all components related to the digitalSTROM communica
             └ GroupIds
 
 ### Sensors
+Sensors represent device parts that measure different things. Each sensor has a special sensor type as it is taken from the specification:
 
+    const (
+	    STtemperature                      SensorType = 66
+	    STrelativeHumidity                 SensorType = 68
+	    STbrightness                       SensorType = 67
+	    STsoundPressureLeve                SensorType = 25
+	    STroomTemperature                  SensorType = 9
+	    STroomRelativeHumidity             SensorType = 13
+	    STroomBrightness                   SensorType = 11
+	    STroomCarbonDioxideConcentration   SensorType = 21
+	    STroomCarbonMonoxideConcentration  SensorType = 22
+    	STroomTemperatureSetPoint          SensorType = 50
+    	STroomTemperatureControlVariable   SensorType = 51
+    	SToutdoorTemperature               SensorType = 10
+    	SToutdoorRelativeHumidity          SensorType = 14
+    	SToutdoorBrightness                SensorType = 12
+        STairPressure                      SensorType = 15
+	    STwindGustSpeed                    SensorType = 16
+    	STwindGustDirection                SensorType = 17
+    	STwindSpeed                        SensorType = 18
+    	STwindDirection                    SensorType = 19
+	    STprecipitationIntensityOfLastHour SensorType = 20
+	    STsunAzimuth                       SensorType = 76
+	    STsunElevation                     SensorType = 77
+	    STactivePower                      SensorType = 4
+	    STapparentPower                    SensorType = 65
+	    SToutputCurrent                    SensorType = 5
+	    SToutputCurrentHighRange           SensorType = 64
+	    STelectricMeter                    SensorType = 6
+	    STlength                           SensorType = 73
+	    STmass                             SensorType = 74
+	    STduration                         SensorType = 75
+    )
+
+Be aware, that ```STouputCurrent``` is not always delivering the current in A like it might be expected. During tests with real installations, it delivered a power value (possibly the 'current' one).
+
+#### Unknown Sensor Types
+
+Not all sensor types a specified in the documentation. A lot of devices have sensors of type ```253``` and ```62```.
 
 ### Binary Inputs
+
+    const (
+    	BITgeneric               BinaryInputType = 0
+    	BITpresence              BinaryInputType = 1
+    	BITbrightness            BinaryInputType = 2
+    	BITpresenceInDarkness    BinaryInputType = 3
+    	BITtwilight              BinaryInputType = 4
+    	BITmotion                BinaryInputType = 5
+    	BITmotionInDarkness      BinaryInputType = 6
+    	BITsmoke                 BinaryInputType = 7
+    	BITwindStrenghAboveLimit BinaryInputType = 8
+    	BITrain                  BinaryInputType = 9
+    	BITsunRadiation          BinaryInputType = 10
+    	BITtemperatureBelowLimit BinaryInputType = 11
+    	BITBatteryStatusIsLow    BinaryInputType = 12
+    	BITwindowIsOpen          BinaryInputType = 13
+    	BITdoorIsOpen            BinaryInputType = 14
+    	BITwindowIsTilted        BinaryInputType = 15
+    	BITgarageDoorIsOpen      BinaryInputType = 16
+    	BITsunProtection         BinaryInputType = 17
+    	BITfrost                 BinaryInputType = 18
+    	BITheatingSystemEnabled  BinaryInputType = 19
+    	BITchangeOverSignal      BinaryInputType = 20
+    	BITinitialization        BinaryInputType = 21
+    	BITmalfunction           BinaryInputType = 22
+    	BITservice               BinaryInputType = 23
+    )
 
 ### OutputChannels
 
@@ -88,6 +154,29 @@ and set with the function
     Account.SetOutputChannelValue(channel *OutputChannel, value string)
 
 Keep in mind: When reading a channel value like the brightness of a lamp, the value range is 0-255 whereas 255 means 100%. However, when setting the value, the range is 0-100. The library is not compansating this issue and simply forwards the values. Example, if you setg the brightness to 50% (value 50), the read value will then be 128.
+
+    const (
+	    OCTbrightness               = OutputChannelType("brightness")
+	    OCThue                      = OutputChannelType("hue")
+	    OCTsaturation               = OutputChannelType("saturation")
+	    OCTcolortemp                = OutputChannelType("colortemp")
+	    OCTx                        = OutputChannelType("x")
+    	OCTy                        = OutputChannelType("y")
+    	OCTshadePositionOutside     = OutputChannelType("shadePositionOutside")
+    	OCTshadePositionIndoor      = OutputChannelType("shadePositionIndoor")
+	    OCTshadeOpeningAngleOutside = OutputChannelType("shadeOpeningAngleOutside")
+	    OCTshadeOpeningAngleInside  = OutputChannelType("shadeOpeningAngleInside")
+	    OCTtransparency             = OutputChannelType("transparency")
+	    OCTairFlowIntensity         = OutputChannelType("airFlowIntensity")
+	    OCTairFlowDirection         = OutputChannelType("airFlowDirection")
+	    OCTairFlapPosition          = OutputChannelType("airFlapPosition")
+    	OCTairLouverPosition        = OutputChannelType("airLouverPosition")
+    	OCTheatingPower             = OutputChannelType("heatingPower")
+    	OCTcoolingCapacity          = OutputChannelType("coolingCapacity")
+    	OCTaudioVolume              = OutputChannelType("audioVolume")
+    	OCTpowerState               = OutputChannelType("powerState")
+    	OCTpowerLevel               = OutputChannelType("powerLevel")
+    )
 
 ### ON State
 
