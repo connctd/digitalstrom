@@ -246,6 +246,8 @@ func processUpdateCommand(a *digitalstrom.Account, cmd []string) {
 		processUpdateChannelsCmd(a, cmd)
 	case "temperatureControls":
 		processUpdateTemperatureControlCmd(a, cmd)
+	case "binInputs":
+		processUpdateBinaryInputsCmd(a, cmd)
 	default:
 		fmt.Printf("Error, '%s' is an unkonwn parameter for update command.\r\n", cmd[1])
 	}
@@ -258,7 +260,7 @@ func updateAll(a *digitalstrom.Account) {
 
 			sensor := a.Devices[i].Sensors[j]
 			fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, sensor.Index, sensor.Type.GetName())
-			value, err := a.PollSensorValue(&a.Devices[i].Sensors[j])
+			value, err := a.PollSensorValue(a.Devices[i].Sensors[j])
 			if err != nil {
 				fmt.Printf("ERROR. %s\r\n", err)
 			} else {
@@ -274,7 +276,7 @@ func updateAll(a *digitalstrom.Account) {
 
 			channel := a.Devices[i].OutputChannels[j]
 			fmt.Printf("   Updating output channel value for '%s.%d - %s' ... ", a.Devices[i].DisplayID, channel.ChannelIndex, channel.ChannelName)
-			value, err := a.PollChannelValue(&a.Devices[i].OutputChannels[j])
+			value, err := a.PollChannelValue(a.Devices[i].OutputChannels[j])
 			if err != nil {
 				fmt.Printf("ERROR. %s\r\n", err)
 			} else {
@@ -338,7 +340,7 @@ func processUpdateDeviceCmd(a *digitalstrom.Account, cmd []string) {
 	for j := range dev.Sensors {
 		sensor := dev.Sensors[j]
 		fmt.Printf("   Updating sensor value for '%s.%d - %s' ... ", dev.DisplayID, sensor.Index, sensor.Type.GetName())
-		value, err := a.PollSensorValue(&dev.Sensors[j])
+		value, err := a.PollSensorValue(dev.Sensors[j])
 		if err != nil {
 			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
@@ -356,6 +358,16 @@ func processUpdateOnCmd(a *digitalstrom.Account, cmd []string) {
 		fmt.Println(err)
 		return
 	}
+}
+
+func processUpdateBinaryInputsCmd(a *digitalstrom.Account, cmd []string) {
+	err := a.PollBinaryInputs()
+	if err != nil {
+		fmt.Printf("Error. Unable to update binary inputs.\r\n")
+		fmt.Println(err)
+		return
+	}
+	fmt.Println()
 }
 
 func processUpdateTemperatureControlCmd(a *digitalstrom.Account, cmd []string) {
@@ -381,7 +393,7 @@ func processUpdateSensorsCmd(a *digitalstrom.Account, cmd []string) {
 
 	for i := range device.Sensors {
 		fmt.Printf("Updating sensor %s.%d ...", cmd[2], i)
-		value, err := a.PollSensorValue(&device.Sensors[i])
+		value, err := a.PollSensorValue(device.Sensors[i])
 		if err != nil {
 			fmt.Printf("ERROR.Unable to update sensor '%d' of device '%s'.\r\n", i, cmd[2])
 			fmt.Println(err)
@@ -408,7 +420,7 @@ func processUpdateChannelsCmd(a *digitalstrom.Account, cmd []string) {
 
 	for i := range dev.OutputChannels {
 		fmt.Printf("   Updating output channel value for '%s.%d - %s' ... ", cmd[2], i, dev.OutputChannels[i].ChannelName)
-		value, err := a.PollChannelValue(&dev.OutputChannels[i])
+		value, err := a.PollChannelValue(dev.OutputChannels[i])
 		if err != nil {
 			fmt.Printf("ERROR. %s\r\n", err)
 		} else {
@@ -1185,15 +1197,15 @@ func generateDeviceNode(device *digitalstrom.Device) node {
 	n.elems = append(n.elems, "MeterName         "+device.MeterName)
 
 	for i := range device.Sensors {
-		n.childs = append(n.childs, generateSensorNode(&device.Sensors[i]))
+		n.childs = append(n.childs, generateSensorNode(device.Sensors[i]))
 	}
 
 	for i := range device.OutputChannels {
-		n.childs = append(n.childs, generateOutputChannelNode(&device.OutputChannels[i]))
+		n.childs = append(n.childs, generateOutputChannelNode(device.OutputChannels[i]))
 	}
 
 	for i := range device.BinaryInputs {
-		n.childs = append(n.childs, generateBinaryInputNode(&device.BinaryInputs[i]))
+		n.childs = append(n.childs, generateBinaryInputNode(device.BinaryInputs[i]))
 	}
 	return n
 }
@@ -1345,6 +1357,7 @@ func printHelp() {
 	fmt.Println("                 channel <deviceID> <channelType>")
 	fmt.Println("                 channels <deviceID>")
 	fmt.Println("                 consumption <circuitID>")
+	fmt.Println("                 binInputs")
 	fmt.Println("                 meter <circuitID>")
 	fmt.Println("                 on")
 	fmt.Println("                 sensor <deviceID> <sensorIndex>")

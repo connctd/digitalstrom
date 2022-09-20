@@ -24,6 +24,7 @@ const (
 	defaultTemperatureControlStatePollingInterval = 250
 	defaultStructurePollingInterval               = 30
 	defaultMaxSimultanousPolls                    = 10
+	defaultBinaryInputsPollingInterval            = 12
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
@@ -68,7 +69,8 @@ type PollingSetup struct {
 	DefaultSensorsPollingInterval                 int `json:"default_sensors_polling_interval"`
 	DefaultChannelsPollingInterval                int `json:"default_channels_polling_interval"`
 	DefaultStructurePollingInterval               int `json:"default_on_value_polling_interval"`
-	DefaultTemperatureControlStatePollingInterval int `json:"default_temperature_control_state_polling_intervall"`
+	DefaultTemperatureControlStatePollingInterval int `json:"default_temperature_control_state_polling_interval"`
+	DefaultBinaryInputsPollingInterval            int `json:"default_binary_inputs_polling_interval`
 	MaxParallelPolls                              int `json:"max_parallel_polls"`
 }
 
@@ -79,6 +81,7 @@ type EventChannels struct {
 	CircuitConsumptionValueChanged     chan<- CircuitConsumptionValueChangeEvent
 	OnStateValueChanged                chan<- OnStateValueChangeEvent
 	ZoneTemperatureControlStateChanged chan<- ZoneTemperatureControlChangeEvent
+	BinaryInputStateChanged            chan<- BinaryInputStateChangeEvent
 	chanMutex                          *sync.Mutex
 }
 
@@ -119,6 +122,7 @@ func NewAccount() *Account {
 			DefaultSensorsPollingInterval:                 defaultSensorPollingInterval,
 			DefaultStructurePollingInterval:               defaultStructurePollingInterval,
 			DefaultTemperatureControlStatePollingInterval: defaultTemperatureControlStatePollingInterval,
+			DefaultBinaryInputsPollingInterval:            defaultBinaryInputsPollingInterval,
 			MaxParallelPolls:                              defaultMaxSimultanousPolls,
 		},
 		pollingHelpers: pollingHelpers{
@@ -152,7 +156,7 @@ func (a *Account) GetSensor(deviceID string, sensorIndex int) (*Sensor, error) {
 	if sensorIndex >= len(device.Sensors) {
 		return nil, errors.New("sensorIndex " + strconv.Itoa(sensorIndex) + " out of range for device " + deviceID)
 	}
-	return &device.Sensors[sensorIndex], nil
+	return device.Sensors[sensorIndex], nil
 }
 
 func (a *Account) IsDevicePresent(deviceID string) (bool, error) {
@@ -162,6 +166,17 @@ func (a *Account) IsDevicePresent(deviceID string) (bool, error) {
 	}
 	return device.IsPresent, nil
 
+}
+
+func (a *Account) GetDeviceByUuid(uuid string) (*Device, error) {
+
+	for _, dev := range a.Devices {
+		if dev.UUID == uuid {
+			return dev, nil
+		}
+	}
+
+	return nil, fmt.Errorf("found no device with dsuid=%s", uuid)
 }
 
 //GetOutputChannel Returning the output channel with die index ID <channelIndex> of device with display ID <deviceID> or nil when either
@@ -174,7 +189,7 @@ func (a *Account) GetOutputChannel(deviceID string, channelIndex int) (*OutputCh
 	if channelIndex >= len(device.OutputChannels) {
 		return nil, errors.New("channelIndex " + strconv.Itoa(channelIndex) + " out of range for device " + deviceID)
 	}
-	return &device.OutputChannels[channelIndex], nil
+	return device.OutputChannels[channelIndex], nil
 }
 
 // Init of the Account. ApplicationLogin will be performed and complete structure requested. ApplicationToken has to be set in advance.
@@ -405,6 +420,7 @@ func (a *Account) SetDefaultPollingIntervals() {
 	}
 	a.pollingHelpers.pollIntervalMap["structure"] = a.PollingSetup.DefaultStructurePollingInterval
 	a.pollingHelpers.pollIntervalMap["temperatureControlState"] = a.PollingSetup.DefaultTemperatureControlStatePollingInterval
+	a.pollingHelpers.pollIntervalMap["binaryInputs"] = a.PollingSetup.DefaultBinaryInputsPollingInterval
 
 }
 
@@ -620,6 +636,36 @@ func (a *Account) PollTemperatureControlValues() error {
 
 // PollSensorValue is requesting the current value the given sensor has. The value will be assigned
 // the the sensor.
+func (a *Account) PollBinaryInputs() error {
+	params := make(map[string]string)
+	res, err := a.Connection.Request(a.Connection.BaseURL+"/json/apartment/getDeviceBinaryInputs", get, "", params)
+	if err != nil {
+		return err
+	}
+	if !res.OK {
+		return errors.New(res.Message)
+	}
+
+	var devArr []interface{}
+
+	devices, ok := res.Result["devices"]
+	if !ok {
+		return fmt.Errorf("foun no field 'devices' - unexpected response")
+	}
+	devArr = devices.([]interface{})
+	for i := range devArr {
+		dev := devArr[i].(map[string]interface{})
+		inputs := dev["binaryInputs"].([]interface{})
+		for n := range inputs {
+			input := inputs[n].(map[string]interface{})
+			a.updateBinaryInputState(dev["dsuid"].(string), int(input["inputType"].(float64)), int(input["state"].(float64)))
+		}
+	}
+	return nil
+}
+
+// PollSensorValue is requesting the current value the given sensor has. The value will be assigned
+// the the sensor.
 func (a *Account) PollSensorValue(sensor *Sensor) (float64, error) {
 	params := make(map[string]string)
 	if len(sensor.device.ID) > 0 {
@@ -768,7 +814,8 @@ func (a *Account) isPollingIntervalReached(id string, interval int) bool {
 	if !ok {
 		return true
 	}
-	return time.Now().Sub(t).Seconds() > float64(interval)
+	return time.Since(t).Seconds() > float64(interval)
+
 }
 
 func (a *Account) setPollingTimeStamp(id string) {
@@ -780,6 +827,21 @@ func (a *Account) setPollingTimeStamp(id string) {
 
 	delete(a.pollingHelpers.activePollingMap, id)
 	a.pollingHelpers.mapMutex.Unlock()
+}
+
+func (a *Account) dispatchBinaryInputStateChange(deviceId string, binaryInputType BinaryInputType, oldValue int, newValue int) {
+	logger.Info(fmt.Sprintf("BinaryInput (type=%d) of device '%s' state changed  from %d to %d", binaryInputType, deviceId, oldValue, newValue))
+
+	if a.pollingHelpers.pollingStopped {
+		return
+	}
+	a.Events.chanMutex.Lock()
+	if a.Events.BinaryInputStateChanged != nil {
+
+		a.Events.BinaryInputStateChanged <- BinaryInputStateChangeEvent{DeviceId: deviceId, InputType: binaryInputType, OldValue: oldValue, NewValue: newValue}
+
+	}
+	a.Events.chanMutex.Unlock()
 }
 
 func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int, newValue int) {
@@ -857,6 +919,27 @@ func (a *Account) dispatchTemperatureControlStateChanged(zoneId int) {
 	if a.Events.ZoneTemperatureControlStateChanged != nil {
 		a.Events.ZoneTemperatureControlStateChanged <- ZoneTemperatureControlChangeEvent{ZoneId: zoneId}
 	}
+}
+
+func (a *Account) updateBinaryInputState(dsuid string, inputType int, state int) error {
+
+	device, err := a.GetDeviceByUuid(dsuid)
+	if err != nil {
+		return err
+	}
+
+	input, err := device.GetBinaryInputByInputType(BinaryInputType(inputType))
+
+	if err != nil {
+		return err
+	}
+
+	if input.State != state {
+		oldState := input.State
+		input.State = state
+		a.dispatchBinaryInputStateChange(device.ID, input.InputType, oldState, state)
+	}
+	return nil
 }
 
 func (a *Account) performPolling(id string) {
@@ -947,6 +1030,8 @@ func (a *Account) performPolling(id string) {
 		a.PollStructureValues()
 	case "temperatureControlState":
 		a.PollTemperatureControlValues()
+	case "binaryInputs":
+		a.PollBinaryInputs()
 	default:
 		// place error logging for invalid id over here
 

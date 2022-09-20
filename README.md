@@ -29,10 +29,7 @@ To avoid a handling with ``userName`` and ``password``, each app could register 
 
 ### Inititialization
 
-The initialization processes several tasks. An application login will be performed in order
-to receive the ``session token``. This token will kept in memory and used for future requests.
-After a successful login, the complete structure and circuits will be requested. The ``session token```
-will be refreshed automatically.
+The initialization processes several tasks. An application login will be performed in order to receive the ``session token``. This token will kept in memory and used for future requests. After a successful login, the complete structure and circuits will be requested. The ``session token``` will be refreshed automatically.
 
     err := account.Init()
 

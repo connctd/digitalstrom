@@ -125,37 +125,37 @@ type Device struct {
 	//ModelFeatures			ModelFeature `json:"modelFeatures"`
 	IsVdcDevice bool `json:"isVdcDevice"`
 	//SupportedBasicScenes []BasicScene
-	ButtonUsage           string          `json:"buttonUsage"`
-	MeterDSID             string          `json:"meterDSID"`
-	MeterDSUID            string          `json:"meterDSUID"`
-	MeterName             string          `json:"meterName"`
-	BusID                 int             `json:"busID"`
-	ZoneID                int             `json:"zoneID"`
-	IsPresent             bool            `json:"isPresent"`
-	IsValid               bool            `json:"isValid"`
-	LastDiscovered        string          `json:"lastDiscovered"`
-	FirstSeen             string          `json:"firstSeen"`
-	InactiveSince         string          `json:"inactiveSince"`
-	On                    bool            `json:"on"`
-	Locked                bool            `json:"locked"`
-	ConfigurationLocked   bool            `json:"configurationLocked"`
-	IgnoreOperationLock   bool            `json:"ignoreOperationLock"`
-	OutputMode            int             `json:"outputMode"`
-	ButtonID              int             `json:"buttonID"`
-	ButtonActiveGroup     int             `json:"buttonActiveGroup"`
-	ButtonGroupMemberShip int             `json:"buttonMemberShip"`
-	ButtonInputMode       int             `json:"buttonInputMode"`
-	ButtonInputIndex      int             `json:"buttonInputIndex"`
-	ButtonInputCount      int             `json:"buttonInputCount"`
-	AKMInputProperty      string          `json:"AKMInputProperty"`
-	BinaryInputCount      int             `json:"binaryInputCount"`
-	BinaryInputs          []BinaryInput   `json:"binaryInputs"`
-	SensorInputCount      int             `json:"sonsorInputCount"`
-	Sensors               []Sensor        `json:"sensors"`
-	SensorDataValid       bool            `json:"sensorDataValid"`
-	OutputChannels        []OutputChannel `json:"outputChannels"`
-	PairedDevices         []string        `json:"pairedDevices"`
-	Groups                []int           `json:"groups"`
+	ButtonUsage           string           `json:"buttonUsage"`
+	MeterDSID             string           `json:"meterDSID"`
+	MeterDSUID            string           `json:"meterDSUID"`
+	MeterName             string           `json:"meterName"`
+	BusID                 int              `json:"busID"`
+	ZoneID                int              `json:"zoneID"`
+	IsPresent             bool             `json:"isPresent"`
+	IsValid               bool             `json:"isValid"`
+	LastDiscovered        string           `json:"lastDiscovered"`
+	FirstSeen             string           `json:"firstSeen"`
+	InactiveSince         string           `json:"inactiveSince"`
+	On                    bool             `json:"on"`
+	Locked                bool             `json:"locked"`
+	ConfigurationLocked   bool             `json:"configurationLocked"`
+	IgnoreOperationLock   bool             `json:"ignoreOperationLock"`
+	OutputMode            int              `json:"outputMode"`
+	ButtonID              int              `json:"buttonID"`
+	ButtonActiveGroup     int              `json:"buttonActiveGroup"`
+	ButtonGroupMemberShip int              `json:"buttonMemberShip"`
+	ButtonInputMode       int              `json:"buttonInputMode"`
+	ButtonInputIndex      int              `json:"buttonInputIndex"`
+	ButtonInputCount      int              `json:"buttonInputCount"`
+	AKMInputProperty      string           `json:"AKMInputProperty"`
+	BinaryInputCount      int              `json:"binaryInputCount"`
+	BinaryInputs          []*BinaryInput   `json:"binaryInputs"`
+	SensorInputCount      int              `json:"sonsorInputCount"`
+	Sensors               []*Sensor        `json:"sensors"`
+	SensorDataValid       bool             `json:"sensorDataValid"`
+	OutputChannels        []*OutputChannel `json:"outputChannels"`
+	PairedDevices         []string         `json:"pairedDevices"`
+	Groups                []int            `json:"groups"`
 }
 
 // BinaryInput ...
@@ -490,11 +490,20 @@ func (st SensorType) GetName() string {
 	}
 }
 
+func (d *Device) GetBinaryInputByInputType(inputType BinaryInputType) (*BinaryInput, error) {
+	for i := range d.BinaryInputs {
+		if d.BinaryInputs[i].InputType == inputType {
+			return d.BinaryInputs[i], nil
+		}
+	}
+	return nil, fmt.Errorf("device has no binaryInput of type %d", inputType)
+}
+
 // GetOutputChannel returns a corresponding channel with the given output channel type.
 func (d *Device) GetOutputChannel(outputChannelType OutputChannelType) (*OutputChannel, error) {
 	for i := range d.OutputChannels {
 		if d.OutputChannels[i].ChannelType == outputChannelType {
-			return &d.OutputChannels[i], nil
+			return d.OutputChannels[i], nil
 		}
 	}
 	return nil, errors.New("device '" + d.DisplayID + "' has no output channel of application type '" + string(outputChannelType) + "'")

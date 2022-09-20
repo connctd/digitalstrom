@@ -35,3 +35,10 @@ type OnStateValueChangeEvent struct {
 type ZoneTemperatureControlChangeEvent struct {
 	ZoneId int
 }
+
+type BinaryInputStateChangeEvent struct {
+	DeviceId  string
+	InputType BinaryInputType
+	OldValue  int
+	NewValue  int
+}
