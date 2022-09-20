@@ -117,6 +117,8 @@ Not all sensor types a specified in the documentation. A lot of devices have sen
 
 ### Binary Inputs
 
+Devices could have BinaryInputs, such as movement or smoke detection. Each binary input has a specific type:
+
     const (
         BITgeneric               BinaryInputType = 0
         BITpresence              BinaryInputType = 1
@@ -143,6 +145,10 @@ Not all sensor types a specified in the documentation. A lot of devices have sen
         BITmalfunction           BinaryInputType = 22
         BITservice               BinaryInputType = 23
     )
+
+To update binary input states for all devices at one, use the command
+
+    Account.PollBinaryInputs()
 
 ### OutputChannels
 
