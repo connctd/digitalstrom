@@ -490,13 +490,13 @@ func (st SensorType) GetName() string {
 	}
 }
 
-func (d *Device) GetBinaryInputByInputType(inputType BinaryInputType) (*BinaryInput, error) {
+func (d *Device) GetBinaryInputByInputID(inputId int) (*BinaryInput, error) {
 	for i := range d.BinaryInputs {
-		if d.BinaryInputs[i].InputType == inputType {
+		if d.BinaryInputs[i].InputID == inputId {
 			return d.BinaryInputs[i], nil
 		}
 	}
-	return nil, fmt.Errorf("device has no binaryInput of type %d", inputType)
+	return nil, fmt.Errorf("device has no binaryInput with id %d", inputId)
 }
 
 // GetOutputChannel returns a corresponding channel with the given output channel type.

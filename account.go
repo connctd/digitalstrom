@@ -658,7 +658,7 @@ func (a *Account) PollBinaryInputs() error {
 		inputs := dev["binaryInputs"].([]interface{})
 		for n := range inputs {
 			input := inputs[n].(map[string]interface{})
-			a.updateBinaryInputState(dev["dsuid"].(string), int(input["inputType"].(float64)), int(input["state"].(float64)))
+			a.updateBinaryInputState(dev["dsuid"].(string), int(input["inputId"].(float64)), int(input["state"].(float64)))
 		}
 	}
 	return nil
@@ -829,8 +829,8 @@ func (a *Account) setPollingTimeStamp(id string) {
 	a.pollingHelpers.mapMutex.Unlock()
 }
 
-func (a *Account) dispatchBinaryInputStateChange(deviceId string, binaryInputType BinaryInputType, oldValue int, newValue int) {
-	logger.Info(fmt.Sprintf("BinaryInput (type=%d) of device '%s' state changed  from %d to %d", binaryInputType, deviceId, oldValue, newValue))
+func (a *Account) dispatchBinaryInputStateChange(deviceId string, inputId int, oldValue int, newValue int) {
+	logger.Info(fmt.Sprintf("BinaryInput (id=%d) of device '%s' state changed  from %d to %d", inputId, deviceId, oldValue, newValue))
 
 	if a.pollingHelpers.pollingStopped {
 		return
@@ -838,7 +838,7 @@ func (a *Account) dispatchBinaryInputStateChange(deviceId string, binaryInputTyp
 	a.Events.chanMutex.Lock()
 	if a.Events.BinaryInputStateChanged != nil {
 
-		a.Events.BinaryInputStateChanged <- BinaryInputStateChangeEvent{DeviceId: deviceId, InputType: binaryInputType, OldValue: oldValue, NewValue: newValue}
+		a.Events.BinaryInputStateChanged <- BinaryInputStateChangeEvent{DeviceId: deviceId, InputId: inputId, OldValue: oldValue, NewValue: newValue}
 
 	}
 	a.Events.chanMutex.Unlock()
@@ -921,14 +921,14 @@ func (a *Account) dispatchTemperatureControlStateChanged(zoneId int) {
 	}
 }
 
-func (a *Account) updateBinaryInputState(dsuid string, inputType int, state int) error {
+func (a *Account) updateBinaryInputState(dsuid string, inputId int, state int) error {
 
 	device, err := a.GetDeviceByUuid(dsuid)
 	if err != nil {
 		return err
 	}
 
-	input, err := device.GetBinaryInputByInputType(BinaryInputType(inputType))
+	input, err := device.GetBinaryInputByInputID(inputId)
 
 	if err != nil {
 		return err
@@ -937,7 +937,7 @@ func (a *Account) updateBinaryInputState(dsuid string, inputType int, state int)
 	if input.State != state {
 		oldState := input.State
 		input.State = state
-		a.dispatchBinaryInputStateChange(device.ID, input.InputType, oldState, state)
+		a.dispatchBinaryInputStateChange(device.ID, inputId, oldState, state)
 	}
 	return nil
 }
