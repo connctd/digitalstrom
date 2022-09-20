@@ -70,7 +70,7 @@ type PollingSetup struct {
 	DefaultChannelsPollingInterval                int `json:"default_channels_polling_interval"`
 	DefaultStructurePollingInterval               int `json:"default_on_value_polling_interval"`
 	DefaultTemperatureControlStatePollingInterval int `json:"default_temperature_control_state_polling_interval"`
-	DefaultBinaryInputsPollingInterval            int `json:"default_binary_inputs_polling_interval`
+	DefaultBinaryInputsPollingInterval            int `json:"default_binary_inputs_polling_interval"`
 	MaxParallelPolls                              int `json:"max_parallel_polls"`
 }
 
@@ -846,7 +846,7 @@ func (a *Account) dispatchBinaryInputStateChange(deviceId string, inputId int, o
 
 func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int, newValue int) {
 
-	logger.Info(fmt.Sprintf("ConsumptionValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
+	logger.Info(fmt.Sprintf("ConsumptionValueChange for ciruit %s (%d to %d))", circuitID, oldValue, newValue))
 
 	if a.pollingHelpers.pollingStopped {
 		return
@@ -862,7 +862,7 @@ func (a *Account) dispatchConsumptionValueChange(circuitID string, oldValue int,
 
 func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newValue int) {
 
-	logger.Info(fmt.Sprintf("MeterValueChange for ciruit %s (%d -> %d))", circuitID, oldValue, newValue))
+	logger.Info(fmt.Sprintf("MeterValueChange for ciruit %s (from %d to %d))", circuitID, oldValue, newValue))
 	if a.pollingHelpers.pollingStopped {
 		return
 	}
@@ -875,7 +875,7 @@ func (a *Account) dispatchMeterValueChange(circuitID string, oldValue int, newVa
 
 func (a *Account) dispatchOutputChannelValueChange(deviceID string, channelIndex int, oldValue int, newValue int) {
 
-	logger.Info(fmt.Sprintf("calling OnOutputChannelValueChange for channel %s.%d (%d -> %d))", deviceID, channelIndex, oldValue, newValue))
+	logger.Info(fmt.Sprintf("calling OnOutputChannelValueChange for channel %s.%d (from %d to %d))", deviceID, channelIndex, oldValue, newValue))
 	if a.pollingHelpers.pollingStopped {
 		return
 	}
@@ -887,7 +887,7 @@ func (a *Account) dispatchOutputChannelValueChange(deviceID string, channelIndex
 }
 
 func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, oldValue float64, newValue float64) {
-	logger.Info(fmt.Sprintf("calling OnSensorValueChange for sensor %s.%d (%f -> %f))", deviceID, sensorIndex, oldValue, newValue))
+	logger.Info(fmt.Sprintf("calling OnSensorValueChange for sensor %s.%d (from %f to %f))", deviceID, sensorIndex, oldValue, newValue))
 	if a.pollingHelpers.pollingStopped {
 		return
 	}
@@ -900,7 +900,7 @@ func (a *Account) dispatchSensorValueChange(deviceID string, sensorIndex int, ol
 
 func (a *Account) dispatchOnValueChange(deviceID string, oldValue bool, newValue bool) {
 
-	logger.Info(fmt.Sprintf("calling OnValueChange for sensor %s.On (%t -> %t))", deviceID, oldValue, newValue))
+	logger.Info(fmt.Sprintf("calling OnValueChange for sensor %s.On (from %t to %t))", deviceID, oldValue, newValue))
 	if a.pollingHelpers.pollingStopped {
 		return
 	}
