@@ -92,6 +92,7 @@ type pollingHelpers struct {
 	activePollingMap  map[string]time.Time
 	pollingStopped    bool
 	mapMutex          *sync.Mutex
+	countMutex        *sync.Mutex
 }
 
 var logger = stdr.New(stdlog.New(os.Stderr, "", stdlog.LstdFlags|stdlog.Lshortfile))
@@ -132,6 +133,7 @@ func NewAccount() *Account {
 			lastPollMap:       make(map[string]time.Time),
 			pollingStopped:    true,
 			mapMutex:          &sync.Mutex{},
+			countMutex:        &sync.Mutex{},
 		},
 		Events: EventChannels{
 			chanMutex: &sync.Mutex{},
@@ -374,13 +376,19 @@ func (a *Account) StartPolling() {
 			case <-ticker.C:
 				for id, interval := range a.pollingHelpers.pollIntervalMap {
 					if interval >= 0 { // intervals lower than 0 will be skipped
+
 						if a.isPollingIntervalReached(id, interval) {
-							if a.pollingHelpers.parallelPollCount < a.PollingSetup.MaxParallelPolls {
+							a.pollingHelpers.countMutex.Lock()
+							pollCount := a.pollingHelpers.parallelPollCount
+							a.pollingHelpers.countMutex.Unlock()
+							if pollCount < a.PollingSetup.MaxParallelPolls {
 								a.pollingHelpers.mapMutex.Lock()
 								_, ok := a.pollingHelpers.activePollingMap[id]
 								a.pollingHelpers.mapMutex.Unlock()
 								if !ok {
+									a.pollingHelpers.countMutex.Lock()
 									a.pollingHelpers.parallelPollCount++
+									a.pollingHelpers.countMutex.Unlock()
 									go a.performPolling(id)
 								}
 							}
@@ -819,7 +827,9 @@ func (a *Account) isPollingIntervalReached(id string, interval int) bool {
 }
 
 func (a *Account) setPollingTimeStamp(id string) {
+	a.pollingHelpers.countMutex.Lock()
 	a.pollingHelpers.parallelPollCount--
+	a.pollingHelpers.countMutex.Unlock()
 	a.pollingHelpers.mapMutex.Lock()
 	a.pollingHelpers.lastPollMap[id] = time.Now()
 	// remove id from polling list
