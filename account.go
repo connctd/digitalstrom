@@ -947,7 +947,7 @@ func (a *Account) updateBinaryInputState(dsuid string, inputId int, state int) e
 	if input.State != state {
 		oldState := input.State
 		input.State = state
-		a.dispatchBinaryInputStateChange(device.ID, inputId, oldState, state)
+		a.dispatchBinaryInputStateChange(device.DisplayID, inputId, oldState, state)
 	}
 	return nil
 }
