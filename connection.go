@@ -131,7 +131,7 @@ func (c *Connection) doRequest(url string, method requestMethod, body string, pa
 
 	res, err := c.HTTPClient.Do(req)
 	if err != nil {
-		logger.Error(err, "unable to perform http request")
+		logger.Error(err, fmt.Sprintf("unable to perform http request (%s)", url))
 		return nil, err
 	}
 

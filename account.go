@@ -18,13 +18,13 @@ import (
 
 // Default polling setup values
 const (
-	defaultSensorPollingInterval                  = 300
+	defaultSensorPollingInterval                  = 800
 	defaultCircuitPollingInterval                 = 15
-	defaultChannelPollingInterval                 = 300
-	defaultTemperatureControlStatePollingInterval = 250
-	defaultStructurePollingInterval               = 30
+	defaultChannelPollingInterval                 = 900
+	defaultTemperatureControlStatePollingInterval = 300
+	defaultStructurePollingInterval               = 250
 	defaultMaxSimultanousPolls                    = 10
-	defaultBinaryInputsPollingInterval            = 12
+	defaultBinaryInputsPollingInterval            = 300
 )
 
 // Account Main communication module to communicate with API. It caches and updates Devices for
